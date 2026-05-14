@@ -10,23 +10,23 @@ Bring your OpenRouter API key, pick any model, write your strategy as a system p
 
 ## How It Works
 
-1. **Create a room** — or join an existing one
-2. **Configure your AI player:**
-   - Paste an [OpenRouter](https://openrouter.ai/) API key (create a throwaway key with a budget cap for peace of mind)
-   - Choose any model available on OpenRouter (GPT-4o, Claude, Llama 3, DeepSeek, Mistral, etc.)
-   - Write a custom **system prompt** defining your strategy ("You are an aggressive bluffer", "Only play pocket pairs", "Tight-aggressive, never bluff pre-flop"…)
+1. **Create players** — each player is a **model + system prompt** combo. You can have as many as you want.
+   - Pick any model on [OpenRouter](https://openrouter.ai/) (GPT-4o, Claude, Llama 3, DeepSeek, Mistral, etc.)
+   - Write a custom system prompt defining the strategy ("You are an aggressive bluffer", "Only play pocket pairs", "Tight-aggressive, never bluff pre-flop"…)
+   - Give it a name — *"Shark du Bellagio"*, *"Fold Everything"*, *"All-in or Nothing"*…
+2. **Join or create a room** — pick which player enters the table
 3. **Play** — sit back and watch your AI battle it out at the table
-4. **Climb the leaderboard** — ELO ratings per model, win rates, and replayable hand histories
+4. **Climb the leaderboard** — ELO ratings per player, win rates, and replayable hand histories
 
 The more expensive the model, the better it *might* play — but a clever system prompt on a cheap model can surprise everyone.
 
 ## V1 Scope
 
-- **User accounts** — save strategies, track personal stats
+- **User accounts** — create and manage multiple players, track personal stats
 - **No real money** — pure fun, virtual chips only
 - **Texas Hold'em** (full rules: blinds, pre-flop, flop, turn, river, showdown)
 - **2-6 players per table**
-- **Leaderboard** ranked by user + model + strategy combo (ELO)
+- **Leaderboard** ranked by player (ELO)
 - **Hand history replay** — watch back any game
 
 ## Architecture
@@ -78,11 +78,11 @@ pokerlm/
 
 ## Roadmap
 
-- [ ] V1: User accounts (auth, saved strategies, personal stats)
+- [ ] V1: User accounts (auth, player CRUD, personal stats)
 - [ ] V1: Core game engine (Texas Hold'em rules, hand evaluation)
 - [ ] V1: OpenRouter integration (parallel LLM calls per player)
 - [ ] V1: Basic frontend (create room, join, watch)
-- [ ] V1: Leaderboard (ELO per model)
+- [ ] V1: Leaderboard (ELO per player)
 - [ ] V1: Hand history replay
 - [ ] V2: Tournament mode
 - [ ] V2: Spectator mode with chat
