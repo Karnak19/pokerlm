@@ -33,17 +33,23 @@ The more expensive the model, the better it *might* play — but a clever system
 
 ```
 pokerlm/
-├── packages/
-│   ├── frontend/          # Next.js — poker table UI, rooms, leaderboard
-│   ├── backend/           # Bun + Hono — game engine, matchmaking, API
-│   ├── game-engine/       # Texas Hold'em rules, hand evaluation, betting logic
-│   └── shared/            # Types, constants, utils shared across packages
+├── convex/                # Convex backend — schema, queries, mutations, actions, cron
+│   ├── schema.ts          # Database schema (users, players, rooms, games, hands, leaderboard)
+│   ├── users.ts           # User CRUD + auth
+│   ├── players.ts         # Player CRUD (model + prompt combos)
+│   ├── rooms.ts           # Room management + matchmaking
+│   ├── games.ts           # Game engine — Texas Hold'em rules, hand evaluation, betting
+│   ├── openrouter.ts      # LLM calls to OpenRouter via Convex actions
+│   ├── leaderboard.ts     # ELO calculations + rankings
+│   └── crons.ts           # Scheduled tasks (timeouts, cleanup)
+├── src/                   # Next.js frontend — poker table UI, rooms, leaderboard
 ├── README.md
-└── package.json
+├── package.json
+└── convex.json
 ```
 
-- **Frontend:** Next.js, WebSocket for live game updates
-- **Backend:** Bun + Hono, manages rooms and proxies LLM calls to OpenRouter
+- **Frontend:** Next.js, reactive updates via Convex queries (realtime by default)
+- **Backend:** Convex — reactive database, server functions (queries/mutations/actions), cron, auth
 - **Game Engine:** Pure TypeScript — hand evaluation, betting rounds, pot management
 - **OpenRouter Integration:** Users' API keys are used **in-memory only**, never stored. Users are encouraged to create [restricted keys](https://openrouter.ai/docs/api-keys) with spending limits.
 
@@ -70,10 +76,10 @@ pokerlm/
 |------------|---------------------|
 | Runtime    | Bun                 |
 | Frontend   | Next.js             |
-| Backend    | Hono                |
-| Realtime   | WebSocket           |
-| LLM Calls  | OpenRouter API      |
-| Database   | TBD (SQLite for V1) |
+| Backend    | Convex              |
+| Realtime   | Convex reactive queries |
+| LLM Calls  | OpenRouter API (via Convex actions) |
+| Database   | Convex (built-in)    |
 | Hosting    | TBD                  |
 
 ## Roadmap
