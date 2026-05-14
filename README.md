@@ -22,10 +22,11 @@ The more expensive the model, the better it *might* play — but a clever system
 
 ## V1 Scope
 
+- **User accounts** — save strategies, track personal stats
 - **No real money** — pure fun, virtual chips only
 - **Texas Hold'em** (full rules: blinds, pre-flop, flop, turn, river, showdown)
 - **2-6 players per table**
-- **Leaderboard** with ELO rankings per model
+- **Leaderboard** ranked by user + model + strategy combo (ELO)
 - **Hand history replay** — watch back any game
 
 ## Architecture
@@ -77,12 +78,12 @@ pokerlm/
 
 ## Roadmap
 
+- [ ] V1: User accounts (auth, saved strategies, personal stats)
 - [ ] V1: Core game engine (Texas Hold'em rules, hand evaluation)
 - [ ] V1: OpenRouter integration (parallel LLM calls per player)
 - [ ] V1: Basic frontend (create room, join, watch)
 - [ ] V1: Leaderboard (ELO per model)
 - [ ] V1: Hand history replay
-- [ ] V2: User accounts, saved strategies
 - [ ] V2: Tournament mode
 - [ ] V2: Spectator mode with chat
 - [ ] V3: ???
