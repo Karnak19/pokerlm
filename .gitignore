@@ -46,3 +46,6 @@ next-env.d.ts
 # agent tooling (local-only)
 /.agents/
 /skills-lock.json
+
+# Claude Code local state
+.claude/

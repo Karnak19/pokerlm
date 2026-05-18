@@ -3,8 +3,11 @@ import { internal, api } from "./_generated/api";
 import { v } from "convex/values";
 import type { GameState, LegalActions } from "../src/engine/state";
 import { legalActions } from "../src/engine/state";
-import { parseLLMAction } from "../src/engine/llmParse";
+import { coerceToLegal } from "../src/engine/llmParse";
 import type { Id } from "./_generated/dataModel";
+import { generateText, Output } from "ai";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { z } from "zod";
 
 // Internal query — read everything the action needs in one shot (consistent snapshot).
 export const seatContext = internalQuery({
@@ -77,13 +80,10 @@ function buildPrompt(ctx: SeatCtx): { system: string; user: string } {
   const system = `You are a Texas Hold'em poker player.
 Strategy directive from the user: ${player.systemPrompt}
 
-You must reply with strictly valid JSON, no prose:
-{"action": "fold" | "check" | "call" | "bet" | "raise" | "all_in", "amount": <integer chips, only when bet/raise>}
-
 Rules:
 - "amount" for bet/raise is the TOTAL chips you want your street-bet to be at after the action (not the increment).
-- If the action you choose isn't legal, your response will be coerced to a safe default (check or fold).
-- Be decisive. Output only the JSON.`;
+- If the action you choose isn't legal, it will be coerced to a safe default (check or fold).
+- Be decisive.`;
 
   const me = seats[seatIndex];
   const opponents = seats
@@ -110,9 +110,7 @@ ${opponents}
 Recent action history (this hand):
 ${history.map((a) => `  seat ${a.seatIndex + 1} ${a.kind}${a.amount ? ` ${a.amount}` : ""} (${a.street})`).join("\n") || "  (none)"}
 
-Legal actions: ${legalLines}
-
-Respond with JSON only.`;
+Legal actions: ${legalLines}`;
 
   return { system, user };
 }
@@ -138,43 +136,33 @@ export const decide = action({
     const { system, user: userMsg } = buildPrompt(seatCtx);
     const startedAt = Date.now();
     let raw = "";
-    let action: ReturnType<typeof parseLLMAction>;
+    let action: ReturnType<typeof coerceToLegal>;
+
+    const openrouter = createOpenRouter({
+      apiKey,
+      headers: {
+        "HTTP-Referer": "https://pokerlm.local",
+        "X-Title": "PokerLM",
+      },
+    });
+
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs ?? 15000);
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`,
-          "HTTP-Referer": "https://pokerlm.local",
-          "X-Title": "PokerLM",
-        },
-        body: JSON.stringify({
-          model: seatCtx.player.model,
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: userMsg },
-          ],
-          temperature: 0.7,
-          max_tokens: 200,
-          response_format: { type: "json_object" },
-        }),
-        signal: controller.signal,
+      const { output: decision } = await generateText({
+        model: openrouter.chat(seatCtx.player.model),
+        output: Output.object({ schema: ActionSchema }),
+        system,
+        prompt: userMsg,
+        temperature: 0.7,
+        abortSignal: controller.signal,
       });
       clearTimeout(timeout);
-      if (!res.ok) {
-        const errText = await res.text();
-        raw = `HTTP ${res.status}: ${errText.slice(0, 200)}`;
-        action = parseLLMAction("", seatCtx.legal as LegalActions);
-      } else {
-        const data: { choices?: { message?: { content?: string } }[] } = await res.json();
-        raw = data.choices?.[0]?.message?.content ?? "";
-        action = parseLLMAction(raw, seatCtx.legal as LegalActions);
-      }
+      raw = JSON.stringify(decision);
+      action = coerceToLegal(decision.action, decision.amount, seatCtx.legal as LegalActions);
     } catch (e) {
       raw = `error: ${e instanceof Error ? e.message : String(e)}`;
-      action = parseLLMAction("", seatCtx.legal as LegalActions);
+      action = coerceToLegal(undefined, undefined, seatCtx.legal as LegalActions);
     }
 
     const thinkingMs = Date.now() - startedAt;
@@ -186,4 +174,9 @@ export const decide = action({
     });
     return { status: "ok" };
   },
+});
+
+const ActionSchema = z.object({
+  action: z.enum(["fold", "check", "call", "bet", "raise", "all_in"]),
+  amount: z.number().int().optional().describe("Total street-bet target (only for bet/raise)"),
 });

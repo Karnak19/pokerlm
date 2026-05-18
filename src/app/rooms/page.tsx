@@ -1,87 +1,347 @@
 "use client";
 
-import { useMutation, useQuery } from "convex/react";
-import { api } from "../../../convex/_generated/api";
-import { useState } from "react";
 import Link from "next/link";
-import { Show, SignInButton } from "@clerk/nextjs";
+import { useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import { SiteShell } from "@/components/site-shell";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+
+function SearchIcon() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
 
 export default function RoomsPage() {
   const rooms = useQuery(api.rooms.listOpen);
-  const create = useMutation(api.rooms.create);
-  const [name, setName] = useState("");
-  const [maxSeats, setMaxSeats] = useState(2);
-  const [busy, setBusy] = useState(false);
 
-  async function onCreate(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      await create({ name, maxSeats });
-      setName("");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const loading = rooms === undefined;
+  const joinable = rooms ?? [];
 
   return (
-    <main className="flex-1 w-full max-w-3xl mx-auto p-8 space-y-6">
-      <header className="flex items-center justify-between">
-        <Link href="/" className="text-sm text-zinc-500 hover:underline">← Home</Link>
-        <h1 className="text-2xl font-semibold">Rooms</h1>
-        <div />
-      </header>
+    <SiteShell footerNote={`${joinable.length} open · ${rooms === undefined ? "…" : rooms.length} total`}>
+      <main className="mx-auto w-full max-w-[1400px] px-10">
+        {/* PAGE HEAD */}
+        <header className="grid grid-cols-[1fr_auto] items-end gap-6 py-12">
+          <div>
+            <div className="mb-3 flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
+              <Link href="/" className="hover:text-foreground">
+                /
+              </Link>
+              <span className="text-muted-foreground/50">›</span>
+              <span className="text-foreground">rooms</span>
+            </div>
+            <h1 className="font-heading font-normal text-5xl tracking-tighter leading-[0.98]">
+              Pull up a <em className="italic text-primary">chair</em>.
+            </h1>
+            <p className="mt-3.5 max-w-[60ch] text-[15.5px] leading-relaxed text-muted-foreground">
+              Open rooms list themselves; live tables are spectate-only. Stakes
+              are in chips, not currency — buy-in equals the starting stack.
+              Models decide in parallel, so the table moves at the speed of its
+              slowest seat.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button size="lg" asChild>
+              <Link href="/rooms/new">
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 5v14" />
+                  <path d="M5 12h14" />
+                </svg>
+                New room
+              </Link>
+            </Button>
+          </div>
+        </header>
 
-      <Show when="signed-out">
-        <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 p-8 text-center space-y-3">
-          <p>Sign in to play.</p>
-          <SignInButton mode="modal">
-            <button className="px-4 py-2 rounded-full bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 text-sm font-medium">Sign in</button>
-          </SignInButton>
-        </div>
-      </Show>
-
-      <Show when="signed-in">
-        <form onSubmit={onCreate} className="flex gap-2 items-end rounded-lg border border-zinc-200 dark:border-zinc-800 p-4">
-          <div className="flex-1 space-y-1">
-            <label className="block text-xs text-zinc-500">Room name</label>
-            <input
-              className="w-full px-3 py-2 rounded border border-zinc-300 dark:border-zinc-700 bg-transparent"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Friday night grind"
-              required
+        {/* TOOLBAR */}
+        <div className="grid grid-cols-1 items-center gap-3.5 border-b border-border py-5 lg:grid-cols-[1fr_auto_auto]">
+          <div className="relative w-full max-w-[420px]">
+            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+              <SearchIcon />
+            </span>
+            <Input
+              type="text"
+              placeholder={`Search rooms · "Salon", model, host, room ID…`}
+              className="pl-9"
             />
           </div>
-          <div className="space-y-1">
-            <label className="block text-xs text-zinc-500">Seats</label>
-            <select
-              className="px-3 py-2 rounded border border-zinc-300 dark:border-zinc-700 bg-transparent"
-              value={maxSeats}
-              onChange={(e) => setMaxSeats(Number(e.target.value))}
-            >
-              {[2,3,4,5,6].map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+              Sort
+            </span>
+            <Tabs defaultValue="newest">
+              <TabsList>
+                <TabsTrigger value="newest">Newest</TabsTrigger>
+                <TabsTrigger value="filling">Filling</TabsTrigger>
+                <TabsTrigger value="stakes">
+                  Stakes <span className="font-mono">↓</span>
+                </TabsTrigger>
+                <TabsTrigger value="avgpot">Avg pot</TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
-          <button disabled={busy} className="px-4 py-2 rounded-full bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 text-sm font-medium disabled:opacity-50">Create</button>
-        </form>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+              View
+            </span>
+            <Tabs defaultValue="grid">
+              <TabsList>
+                <TabsTrigger value="grid">
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="3" y="3" width="7" height="7" />
+                    <rect x="14" y="3" width="7" height="7" />
+                    <rect x="3" y="14" width="7" height="7" />
+                    <rect x="14" y="14" width="7" height="7" />
+                  </svg>
+                  Grid
+                </TabsTrigger>
+                <TabsTrigger value="list">
+                  <svg
+                    width="13"
+                    height="13"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <line x1="3" y1="6" x2="21" y2="6" />
+                    <line x1="3" y1="12" x2="21" y2="12" />
+                    <line x1="3" y1="18" x2="21" y2="18" />
+                  </svg>
+                  List
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+        </div>
 
-        <ul className="space-y-2">
-          {rooms === undefined && <li className="text-sm text-zinc-500">Loading…</li>}
-          {rooms && rooms.length === 0 && <li className="text-sm text-zinc-500">No open rooms.</li>}
-          {rooms?.map((r) => (
-            <li key={r._id} className="flex items-center justify-between p-3 rounded-lg border border-zinc-200 dark:border-zinc-800">
-              <div>
-                <div className="font-medium">{r.name}</div>
-                <div className="text-xs text-zinc-500">
-                  {r.seatsTaken}/{r.maxSeats} seats · blinds {r.smallBlind}/{r.bigBlind} · stack {r.startingStack}
-                </div>
-              </div>
-              <Link href={`/rooms/${r._id}`} className="text-xs px-3 py-1 rounded-full border border-zinc-300 dark:border-zinc-700">Open</Link>
-            </li>
-          ))}
-        </ul>
-      </Show>
-    </main>
+        {/* FILTER CHIPS */}
+        <div className="flex flex-wrap items-center gap-2 py-4.5">
+          <span className="mr-1.5 self-center font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+            Filters
+          </span>
+          <Badge variant="default" className="cursor-pointer">
+            Joinable <span className="ml-1 opacity-70">✕</span>
+          </Badge>
+          <Badge variant="outline" className="cursor-pointer">
+            Live now
+          </Badge>
+          <Badge variant="outline" className="cursor-pointer">
+            Heads-up
+          </Badge>
+          <Badge variant="outline" className="cursor-pointer">
+            3–6 seats
+          </Badge>
+          <Badge variant="outline" className="cursor-pointer">
+            Stakes{" "}
+            <span className="ml-1 font-mono tabular-nums">≤ 100/200</span>
+          </Badge>
+          <Badge variant="outline" className="cursor-pointer">
+            Buy-in{" "}
+            <span className="ml-1 font-mono tabular-nums">$1k–$5k</span>
+          </Badge>
+          <Badge variant="default" className="cursor-pointer">
+            My friends only <span className="ml-1 opacity-70">✕</span>
+          </Badge>
+          <Badge
+            variant="outline"
+            className="cursor-pointer border-dashed text-muted-foreground"
+          >
+            + Add filter
+          </Badge>
+        </div>
+
+        {/* SECTION · JOINABLE */}
+        <div className="mt-9 mb-4 flex items-baseline justify-between gap-3.5">
+          <h2 className="font-heading text-[28px] font-normal tracking-tight">
+            Joinable <em className="italic text-primary">now</em>
+          </h2>
+          <span className="font-mono text-xs text-muted-foreground">
+            {loading
+              ? "—"
+              : `${joinable.length} room${joinable.length === 1 ? "" : "s"}`}
+          </span>
+        </div>
+
+        {loading ? (
+          <div className="py-10 text-muted-foreground">Loading…</div>
+        ) : joinable.length === 0 ? (
+          <p className="font-heading italic text-muted-foreground py-10">
+            No open rooms.
+          </p>
+        ) : (
+          <div className="grid gap-4.5 grid-cols-[repeat(auto-fill,minmax(340px,1fr))]">
+            {joinable.map((r) => {
+              const full = r.seatsTaken >= r.maxSeats;
+              const freeSeats = Math.max(0, r.maxSeats - r.seatsTaken);
+              const idShort = r._id.slice(-4);
+              const initial = (r.name || "?").trim().charAt(0).toUpperCase();
+              const filledAvs = Array.from({ length: r.seatsTaken });
+              return (
+                <Card
+                  key={r._id}
+                  className={`gap-4 rounded-2xl p-5.5 transition-colors hover:border-primary/35 ${
+                    full ? "opacity-75" : ""
+                  }`}
+                >
+                  <CardHeader className="flex flex-row items-start justify-between gap-3 px-0">
+                    <div>
+                      <h3 className="font-heading text-2xl font-normal leading-tight tracking-tight">
+                        {r.name}
+                      </h3>
+                      <div className="mt-1 font-mono text-[10.5px] text-muted-foreground">
+                        room · <span className="tabular-nums">{idShort}</span>{" "}
+                        · seats{" "}
+                        <span className="tabular-nums">
+                          {r.seatsTaken}/{r.maxSeats}
+                        </span>
+                      </div>
+                    </div>
+                    {full ? (
+                      <Badge variant="outline" className="gap-1.5">
+                        <span className="size-1.5 rounded-full bg-muted-foreground" />
+                        Full · waiting
+                      </Badge>
+                    ) : (
+                      <Badge variant="default" className="gap-1.5">
+                        <span className="size-1.5 rounded-full bg-primary-foreground/80" />
+                        Open
+                      </Badge>
+                    )}
+                  </CardHeader>
+                  <CardContent className="px-0">
+                    <div className="grid grid-cols-3 gap-3.5 border-y border-dashed border-border py-3.5">
+                      <div>
+                        <div className="mb-1 font-mono text-[9.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                          Stakes
+                        </div>
+                        <div className="font-mono tabular-nums text-sm">
+                          {r.smallBlind} / {r.bigBlind}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="mb-1 font-mono text-[9.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                          Buy-in
+                        </div>
+                        <div className="font-mono tabular-nums text-sm">
+                          {r.startingStack.toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="mb-1 font-mono text-[9.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                          Avg pot
+                        </div>
+                        <div className="font-mono tabular-nums text-sm">
+                          —
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4.5 grid grid-cols-[1fr_auto] items-center gap-3">
+                      <div className="flex items-center -space-x-2">
+                        {filledAvs.map((_, i) => (
+                          <Avatar
+                            key={i}
+                            size="sm"
+                            className="pl-av size-[30px] text-[13px]"
+                          >
+                            <AvatarFallback className="bg-transparent text-inherit">
+                              {initial}
+                            </AvatarFallback>
+                          </Avatar>
+                        ))}
+                        {freeSeats > 0 && (
+                          <Avatar
+                            size="sm"
+                            className="size-[30px] border border-dashed border-border bg-input/35 text-muted-foreground"
+                          >
+                            <AvatarFallback className="bg-transparent font-mono text-[11px] text-muted-foreground">
+                              +{freeSeats}
+                            </AvatarFallback>
+                          </Avatar>
+                        )}
+                      </div>
+                      <div className="text-right font-mono text-xs text-muted-foreground">
+                        <span className="block text-base text-foreground tabular-nums">
+                          {r.seatsTaken} / {r.maxSeats}
+                        </span>
+                        {full
+                          ? "all seats taken"
+                          : `${freeSeats} seat${freeSeats === 1 ? "" : "s"} free`}
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="-mx-5.5 -mb-5.5 mt-1 flex items-center justify-between gap-3 border-t border-border bg-transparent px-5.5 py-4">
+                    <div className="flex flex-wrap gap-1">
+                      <span className="rounded-full border border-border bg-input/20 px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+                        mixed models
+                      </span>
+                    </div>
+                    {full ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled
+                        className="cursor-not-allowed opacity-60"
+                      >
+                        Waitlist
+                      </Button>
+                    ) : (
+                      <Button size="sm" asChild>
+                        <Link href={`/rooms/${r._id}`}>Sit</Link>
+                      </Button>
+                    )}
+                  </CardFooter>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+
+      </main>
+    </SiteShell>
   );
 }

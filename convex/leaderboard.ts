@@ -94,7 +94,7 @@ export const top = query({
           gamesPlayed: r.gamesPlayed,
           wins: r.wins,
           player: player ? { name: player.name, model: player.model } : null,
-          owner: owner ? { name: owner.name, email: owner.email } : null,
+          owner: owner ? { _id: owner._id, name: owner.name, email: owner.email } : null,
         };
       }),
     );
