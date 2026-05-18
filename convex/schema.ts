@@ -1,0 +1,112 @@
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+
+export default defineSchema({
+  users: defineTable({
+    tokenIdentifier: v.string(),
+    email: v.optional(v.string()),
+    name: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_token", ["tokenIdentifier"]),
+
+  players: defineTable({
+    userId: v.id("users"),
+    name: v.string(),
+    model: v.string(),
+    systemPrompt: v.string(),
+    createdAt: v.number(),
+  }).index("by_user", ["userId"]),
+
+  rooms: defineTable({
+    name: v.string(),
+    status: v.union(
+      v.literal("waiting"),
+      v.literal("playing"),
+      v.literal("finished"),
+    ),
+    maxSeats: v.number(),
+    smallBlind: v.number(),
+    bigBlind: v.number(),
+    startingStack: v.number(),
+    createdBy: v.id("users"),
+    createdAt: v.number(),
+    lastActivityAt: v.number(),
+  }).index("by_status", ["status"]),
+
+  seats: defineTable({
+    roomId: v.id("rooms"),
+    playerId: v.id("players"),
+    userId: v.id("users"),
+    seatIndex: v.number(),
+    stack: v.number(),
+    status: v.union(
+      v.literal("active"),
+      v.literal("folded"),
+      v.literal("all_in"),
+      v.literal("sitting_out"),
+    ),
+  })
+    .index("by_room", ["roomId"])
+    .index("by_room_user", ["roomId", "userId"])
+    .index("by_room_seat", ["roomId", "seatIndex"]),
+
+  games: defineTable({
+    roomId: v.id("rooms"),
+    handNumber: v.number(),
+    dealerSeatIndex: v.number(),
+    status: v.union(v.literal("in_progress"), v.literal("complete")),
+    // Map from engine seatIndex → Convex seats._id (since engine is seat-index based)
+    seatIdByIndex: v.array(v.union(v.id("seats"), v.null())),
+    state: v.string(),                                // JSON-encoded GameState
+    currentSeatToActIndex: v.optional(v.number()),    // mirror of state.toAct for queries
+    currentSeatToActSince: v.optional(v.number()),
+    startedAt: v.number(),
+    endedAt: v.optional(v.number()),
+  })
+    .index("by_room", ["roomId"])
+    .index("by_room_hand", ["roomId", "handNumber"])
+    .index("by_status", ["status"]),
+
+  actions: defineTable({
+    gameId: v.id("games"),
+    seatId: v.id("seats"),
+    seatIndex: v.number(),
+    street: v.string(),
+    kind: v.union(
+      v.literal("fold"),
+      v.literal("check"),
+      v.literal("call"),
+      v.literal("bet"),
+      v.literal("raise"),
+      v.literal("all_in"),
+    ),
+    amount: v.number(),
+    thinkingMs: v.optional(v.number()),
+    rawLLM: v.optional(v.string()),
+    at: v.number(),
+  }).index("by_game", ["gameId"]),
+
+  handHistories: defineTable({
+    gameId: v.id("games"),
+    roomId: v.id("rooms"),
+    handNumber: v.number(),
+    winners: v.array(v.object({
+      seatId: v.id("seats"),
+      playerId: v.id("players"),
+      amount: v.number(),
+    })),
+    finalPot: v.number(),
+    replayBlob: v.string(),
+    endedAt: v.number(),
+  })
+    .index("by_room", ["roomId"])
+    .index("by_game", ["gameId"]),
+
+  elo: defineTable({
+    playerId: v.id("players"),
+    rating: v.number(),
+    gamesPlayed: v.number(),
+    wins: v.number(),
+    updatedAt: v.number(),
+  }).index("by_player", ["playerId"]),
+});
