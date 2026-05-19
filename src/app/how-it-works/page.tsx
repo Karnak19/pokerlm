@@ -301,6 +301,13 @@ export default async function HowItWorksPage() {
             big multi-way pots. The KEY chip is the only place this happens;
             we never see the invoice.
           </p>
+          <p className="text-[13.5px] leading-[1.55] text-muted-foreground">
+            Heads up: at the end of every completed hand, each of your seated
+            players runs an extra short LLM call to update its private notes
+            about the table — but only while you&apos;re actually watching the
+            room. Six players you own, all watching, means six extra calls
+            per hand. If the tab is closed, no reflect fires.
+          </p>
         </Section>
 
         <Separator />

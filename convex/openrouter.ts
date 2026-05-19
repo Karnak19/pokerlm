@@ -1,11 +1,11 @@
-import { action, internalQuery } from "./_generated/server";
+import { action, internalMutation, internalQuery } from "./_generated/server";
 import { internal, api } from "./_generated/api";
 import { v } from "convex/values";
 import type { GameState, LegalActions } from "../src/engine/state";
 import { legalActions } from "../src/engine/state";
 import { coerceToLegal } from "../src/engine/llmParse";
 import type { Id } from "./_generated/dataModel";
-import { generateText, Output } from "ai";
+import { generateText, Output, tool } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 
@@ -29,10 +29,15 @@ export const seatContext = internalQuery({
       .withIndex("by_game", (q) => q.eq("gameId", gameId))
       .order("desc")
       .take(30);
+    const memory = await ctx.db
+      .query("memories")
+      .withIndex("by_seat", (q) => q.eq("seatId", seatId))
+      .first();
     return {
       gameId,
       seatIndex: state.toAct,
       ownerUserId: seat.userId,
+      memoryText: memory?.text ?? null,
       state,
       legal: legalActions(state),
       hole: state.seats[state.toAct].hole,
@@ -66,6 +71,7 @@ type SeatCtx = {
   gameId: Id<"games">;
   seatIndex: number;
   ownerUserId: Id<"users">;
+  memoryText: string | null;
   state: GameState;
   legal: LegalActions;
   hole: [string, string] | null;
@@ -102,6 +108,7 @@ function buildPrompt(ctx: SeatCtx): { system: string; user: string } {
     seatIndex,
     legal,
     history,
+    memoryText,
   } = ctx;
   const system = `You are a Texas Hold'em poker player.
 Strategy directive from the user: ${player.systemPrompt}
@@ -138,6 +145,9 @@ Your stack: ${me.stack} | Your street-bet so far: ${me.streetBet}
 Current bet to match: ${currentBet}
 Opponents:
 ${opponents}
+
+Your notes from this session:
+${memoryText ?? "(none yet — first hand at this table)"}
 
 Recent action history (this hand):
 ${history.map((a) => `  seat ${a.seatIndex + 1} ${a.kind}${a.amount ? ` ${a.amount}` : ""} (${a.street})`).join("\n") || "  (none)"}
@@ -241,4 +251,226 @@ const ActionSchema = z.object({
     .int()
     .optional()
     .describe("Total street-bet target (only for bet/raise)"),
+});
+
+// ---------- per-player opponent memory (reflect) ----------
+
+export const reflectContext = internalQuery({
+  args: { gameId: v.id("games"), playerId: v.id("players") },
+  handler: async (ctx, { gameId, playerId }) => {
+    const game = await ctx.db.get(gameId);
+    if (!game) return null;
+    if (game.status !== "complete") return null;
+    const finalState = JSON.parse(game.state) as GameState;
+
+    // The author's seat for this room. Memory scope = this seating.
+    const seat = await ctx.db
+      .query("seats")
+      .withIndex("by_room", (q) => q.eq("roomId", game.roomId))
+      .filter((q) => q.eq(q.field("playerId"), playerId))
+      .first();
+    if (!seat) return null;
+
+    const player = await ctx.db.get(playerId);
+    if (!player) return null;
+
+    const actions = await ctx.db
+      .query("actions")
+      .withIndex("by_game", (q) => q.eq("gameId", gameId))
+      .order("asc")
+      .collect();
+
+    const allSeats = await ctx.db
+      .query("seats")
+      .withIndex("by_room", (q) => q.eq("roomId", game.roomId))
+      .collect();
+    const opponents = await Promise.all(
+      allSeats
+        .filter((s) => s._id !== seat._id)
+        .map(async (s) => {
+          const p = await ctx.db.get(s.playerId);
+          return { seatIndex: s.seatIndex, name: p?.name ?? "(unknown)" };
+        }),
+    );
+
+    const memory = await ctx.db
+      .query("memories")
+      .withIndex("by_seat", (q) => q.eq("seatId", seat._id))
+      .first();
+
+    // finalState.seats[i].hole is non-null iff that seat reached showdown
+    // (folded seats are mutated to status "folded" but engine keeps hole).
+    // We expose hole only for non-folded seats — that mirrors a live table.
+    const reveals = finalState.seats
+      .filter((s) => s.hole && s.status !== "folded" && s.status !== "sitting_out")
+      .map((s) => ({ seatIndex: s.seatIndex, hole: s.hole! }));
+
+    return {
+      gameId,
+      roomId: game.roomId,
+      ownerUserId: seat.userId,
+      seatId: seat._id,
+      seatIndex: seat.seatIndex,
+      player: {
+        name: player.name,
+        model: player.model,
+        systemPrompt: player.systemPrompt,
+      },
+      ownHole: finalState.seats[seat.seatIndex]?.hole ?? null,
+      community: finalState.community,
+      pot: finalState.pot, // post-award this is 0; kept for reference
+      winners: finalState.winners ?? [],
+      reveals,
+      actions: actions.map((a) => ({
+        seatIndex: a.seatIndex,
+        street: a.street,
+        kind: a.kind,
+        amount: a.amount,
+      })),
+      opponents,
+      currentMemory: memory?.text ?? null,
+      hasMemory: !!memory,
+      memoryId: memory?._id ?? null,
+    };
+  },
+});
+
+export const upsertMemory = internalMutation({
+  args: {
+    memoryId: v.union(v.id("memories"), v.null()),
+    seatId: v.id("seats"),
+    playerId: v.id("players"),
+    text: v.string(),
+  },
+  handler: async (ctx, { memoryId, seatId, playerId, text }) => {
+    const now = Date.now();
+    const clipped = text.slice(0, 1000);
+    if (memoryId) {
+      await ctx.db.patch(memoryId, { text: clipped, updatedAt: now });
+    } else {
+      await ctx.db.insert("memories", {
+        seatId,
+        playerId,
+        text: clipped,
+        updatedAt: now,
+      });
+    }
+  },
+});
+
+const MemorySchema = z.object({ text: z.string().max(1000) });
+
+export const reflect = action({
+  args: {
+    gameId: v.id("games"),
+    playerId: v.id("players"),
+    apiKey: v.string(),
+  },
+  handler: async (
+    ctx,
+    { gameId, playerId, apiKey },
+  ): Promise<{ status: "ok" | "skipped" | "error"; reason?: string }> => {
+    const refl = await ctx.runQuery(internal.openrouter.reflectContext, {
+      gameId,
+      playerId,
+    });
+    if (!refl) return { status: "skipped", reason: "no context" };
+
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { status: "error", reason: "not authenticated" };
+    const user = await ctx.runQuery(api.users.me, {});
+    if (!user || user._id !== refl.ownerUserId) {
+      return { status: "error", reason: "not your seat" };
+    }
+
+    const transcript = refl.actions
+      .map(
+        (a) =>
+          `  seat ${a.seatIndex + 1} ${a.kind}${a.amount ? ` ${a.amount}` : ""} (${a.street})`,
+      )
+      .join("\n");
+    const opponentLines = refl.opponents
+      .map((o) => `  seat ${o.seatIndex + 1}: ${o.name}`)
+      .join("\n");
+    const revealLines = refl.reveals
+      .filter((r) => r.seatIndex !== refl.seatIndex)
+      .map((r) => `  seat ${r.seatIndex + 1}: ${r.hole.join(" ")}`)
+      .join("\n");
+    const winnerLines = refl.winners
+      .map((w) => `  seat ${w.seatIndex + 1} won ${w.amount}`)
+      .join("\n");
+
+    const system = `You are a Texas Hold'em player keeping a freeform note about the other players at this table.
+Strategy directive from the user: ${refl.player.systemPrompt}
+
+You just finished a hand. Decide whether to update your note. Call the update_memory tool ONLY if you want to change something; if your current notes are still accurate, do not call the tool.
+The tool REPLACES the entire note — write the full text you want to remember next time. ≤1000 chars.
+Notes should help you exploit opponent tendencies: who bluffs, who folds to pressure, who slow-plays, sizing tells. Be terse.`;
+
+    const userMsg = `Hand transcript (in order):
+${transcript || "  (no actions)"}
+
+Community cards: ${refl.community.join(" ") || "(none)"}
+Your hole cards: ${(refl.ownHole ?? []).join(" ") || "(none)"}
+
+Opponents at this table:
+${opponentLines || "  (none)"}
+
+Cards revealed at showdown:
+${revealLines || "  (none — everyone else folded pre-showdown)"}
+
+Winners:
+${winnerLines || "  (none)"}
+
+Your current notes (will be replaced if you call update_memory):
+${refl.currentMemory ?? "(none yet — first hand at this table)"}`;
+
+    const siteUrl =
+      process.env.SITE_URL ?? "https://github.com/Karnak19/pokerlm";
+    const openrouter = createOpenRouter({
+      apiKey,
+      headers: {
+        "HTTP-Referer": siteUrl,
+        "X-Title": "PokerLM",
+        "X-OpenRouter-Categories": "game",
+      },
+    });
+
+    let nextText: string | null = null;
+    try {
+      const result = await generateText({
+        model: openrouter.chat(refl.player.model),
+        system,
+        prompt: userMsg,
+        temperature: 0.5,
+        toolChoice: "auto",
+        tools: {
+          update_memory: tool({
+            description:
+              "Replace your memory note about the players at this table. The text you provide becomes your full memory; the previous text is discarded. ≤1000 chars.",
+            inputSchema: MemorySchema,
+          }),
+        },
+      });
+      const call = result.toolCalls?.find((c) => c.toolName === "update_memory");
+      if (call) {
+        const parsed = MemorySchema.safeParse(call.input);
+        if (parsed.success) nextText = parsed.data.text;
+      }
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      console.error("openrouter.reflect failed:", detail);
+      return { status: "error", reason: "llm call failed" };
+    }
+
+    if (nextText === null) return { status: "skipped", reason: "no tool call" };
+
+    await ctx.runMutation(internal.openrouter.upsertMemory, {
+      memoryId: refl.memoryId,
+      seatId: refl.seatId,
+      playerId,
+      text: nextText,
+    });
+    return { status: "ok" };
+  },
 });
