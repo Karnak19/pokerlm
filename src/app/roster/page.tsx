@@ -21,9 +21,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { MoreVertical, Plus, Upload, Search, Archive, Trash2, ArrowRight } from "lucide-react";
+import { MoreVertical, Plus, Upload, Search, Archive, Trash2, ArrowRight, Sparkles } from "lucide-react";
 import { RatingChart } from "@/components/rating-chart";
 import { PlayerAvatar } from "@/components/player-avatar";
+import { CoachSheet } from "@/components/coach-sheet";
 
 type OpenRouterModel = {
   id: string;
@@ -131,6 +132,7 @@ export default function PlayersPage() {
   const [models, setModels] = useState<ModelOption[]>(CURATED_MODELS);
   const [modelsLoading, setModelsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [coachOpen, setCoachOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -586,7 +588,18 @@ export default function PlayersPage() {
                     </div>
 
                     <div className="grid gap-2">
-                      <Label>System prompt</Label>
+                      <div className="flex items-center justify-between gap-2">
+                        <Label>System prompt</Label>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCoachOpen(true)}
+                        >
+                          <Sparkles />
+                          Coach me
+                        </Button>
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         {PROMPT_PRESETS.map((preset, idx) => {
                           const on = activePresetIdx === idx;
@@ -762,6 +775,16 @@ export default function PlayersPage() {
             </section>
           )}
 
+          <CoachSheet
+            open={coachOpen}
+            onOpenChange={setCoachOpen}
+            models={models}
+            onApplyPrompt={(text) => {
+              if (systemPrompt.trim() && !confirm("Replace your current prompt?")) return;
+              setSystemPrompt(text);
+              setCoachOpen(false);
+            }}
+          />
         </Show>
       </main>
     </SiteShell>
