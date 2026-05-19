@@ -276,6 +276,7 @@ export function SiteFooter({ note }: { note?: string }) {
         )}
       </div>
       <div className="flex items-center gap-4 font-mono text-[11px]">
+        <Link href="/how-it-works" className="hover:text-foreground">How it works</Link>
         <Link href="/leaderboard" className="hover:text-foreground">Leaderboard</Link>
         <Link href="/rooms" className="hover:text-foreground">Rooms</Link>
       </div>

@@ -138,10 +138,16 @@ export const decide = action({
     let raw = "";
     let action: ReturnType<typeof coerceToLegal>;
 
+    // OpenRouter App Attribution — these headers make the call show up under
+    // PokerLM in the user's logs and count toward our app on the OpenRouter
+    // public leaderboard. Set SITE_URL in Convex env (`npx convex env set
+    // SITE_URL https://pokerlm.app`) to override the fallback.
+    // https://openrouter.ai/docs/app-attribution
+    const siteUrl = process.env.SITE_URL ?? "https://github.com/Karnak19/pokerlm";
     const openrouter = createOpenRouter({
       apiKey,
       headers: {
-        "HTTP-Referer": "https://pokerlm.local",
+        "HTTP-Referer": siteUrl,
         "X-Title": "PokerLM",
       },
     });

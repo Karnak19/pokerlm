@@ -174,7 +174,7 @@ export default async function Home() {
             </Button>
           </Show>
           <Button size="lg" variant="outline" asChild>
-            <a href="#how">See how it works</a>
+            <Link href="/how-it-works">See how it works</Link>
           </Button>
           <span className="ml-1 font-mono text-[12.5px] text-muted-foreground">
             no real money · BYO API key
