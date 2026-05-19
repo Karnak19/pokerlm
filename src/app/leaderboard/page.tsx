@@ -8,12 +8,7 @@ import { SiteShell } from "@/components/site-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-
-type Range = "24h" | "7d" | "30d" | "all";
-type Mode = "all" | "hu" | "34" | "6";
-type MinSample = "20" | "100" | "500";
 
 const MODEL_FAMILIES = [
   "anthropic",
@@ -43,28 +38,47 @@ function rankPad(i: number): string {
   return String(i + 1).padStart(2, "0");
 }
 
+// Renders a polyline through the given rating points. Empty / single-point
+// inputs render a faint flat dash so the cell never looks broken.
 function Sparkline({
-  trend = "up",
+  points,
   className,
 }: {
-  trend?: "up" | "down" | "flat";
+  points: number[] | undefined;
   className?: string;
 }) {
-  const stroke =
-    trend === "up"
-      ? "oklch(0.76 0.135 145)"
-      : trend === "down"
-        ? "oklch(0.66 0.215 25)"
-        : "oklch(0.66 0.018 85)";
-  const d =
-    trend === "up"
-      ? "M0,22 L12,20 L24,21 L36,17 L48,15 L60,12 L72,13 L84,8 L96,9 L108,4 L120,2"
-      : trend === "down"
-        ? "M0,10 L12,12 L24,11 L36,14 L48,12 L60,15 L72,14 L84,17 L96,16 L108,18 L120,20"
-        : "M0,16 L12,15 L24,16 L36,14 L48,16 L60,15 L72,14 L84,14 L96,15 L108,13 L120,14";
+  if (!points || points.length < 2) {
+    return (
+      <svg className={className} viewBox="0 0 120 28" preserveAspectRatio="none">
+        <line
+          x1="0"
+          y1="14"
+          x2="120"
+          y2="14"
+          stroke="oklch(0.66 0.018 85)"
+          strokeWidth="1"
+          strokeDasharray="2 3"
+          opacity="0.4"
+        />
+      </svg>
+    );
+  }
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 1;
+  const dx = 120 / (points.length - 1);
+  const d = points
+    .map((r, i) => {
+      const x = i * dx;
+      const y = 26 - ((r - min) / range) * 24;
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  const trendUp = points[points.length - 1] >= points[0];
+  const stroke = trendUp ? "oklch(0.76 0.135 145)" : "oklch(0.66 0.215 25)";
   return (
     <svg className={className} viewBox="0 0 120 28" preserveAspectRatio="none">
-      <path d={d} fill="none" stroke={stroke} strokeWidth="1.4" strokeLinejoin="round" />
+      <path d={d} fill="none" stroke={stroke} strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
 }
@@ -85,11 +99,16 @@ const MONO_LABEL =
 export default function LeaderboardPage() {
   const me = useQuery(api.users.me);
   const rows = useQuery(api.leaderboard.top, { limit: 50 });
-  const [range, setRange] = useState<Range>("7d");
-  const [mode, setMode] = useState<Mode>("all");
-  const [minSample, setMinSample] = useState<MinSample>("100");
+  const movers = useQuery(api.leaderboard.movers, { limit: 6 });
+  // Range / mode / min-sample filtering removed — see toolbar note above.
   const [familyFilter, setFamilyFilter] = useState<string | "all">("all");
   const [search, setSearch] = useState("");
+
+  const playerIds = useMemo(() => (rows ?? []).map((r) => r.playerId), [rows]);
+  const sparkData = useQuery(
+    api.leaderboard.historyMany,
+    playerIds.length > 0 ? { playerIds, limit: 30 } : "skip",
+  );
 
   const filtered = useMemo(() => {
     if (!rows) return rows;
@@ -110,7 +129,6 @@ export default function LeaderboardPage() {
 
   const top3 = (filtered ?? []).slice(0, 3);
   const tail = (filtered ?? []).slice(0, 25);
-  const movers = (filtered ?? []).slice(0, 6);
 
   const totalRanked = filtered?.length ?? 0;
   const medianElo = (() => {
@@ -175,7 +193,7 @@ export default function LeaderboardPage() {
   const topMetaElo = modelMeta[0]?.avgElo ?? 1;
 
   return (
-    <SiteShell footerNote={`${totalRanked} ranked · ${fmtNum(totalHands)} hands · ${range} window`}>
+    <SiteShell footerNote={`${totalRanked} ranked · ${fmtNum(totalHands)} hands · all-time`}>
       <main className="mx-auto w-full max-w-[1400px] px-10">
         {/* HEADER */}
         <header className="grid grid-cols-1 items-end gap-6 pt-12 pb-7 md:grid-cols-[1fr_auto]">
@@ -202,36 +220,14 @@ export default function LeaderboardPage() {
               />
               live · {totalRanked} ranked players
             </span>
-            <Tabs value={range} onValueChange={(v) => setRange(v as Range)}>
-              <TabsList>
-                <TabsTrigger value="24h">24h</TabsTrigger>
-                <TabsTrigger value="7d">7d</TabsTrigger>
-                <TabsTrigger value="30d">30d</TabsTrigger>
-                <TabsTrigger value="all">All-time</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            {/* Range / mode / min-sample tabs removed — `leaderboard.top`
+                doesn't accept those args yet, so the controls were lying.
+                Bring back when an ELO-history table exists. */}
           </div>
         </header>
 
-        {/* RANGE ROW */}
+        {/* TOOLBAR ROW */}
         <div className="mt-2 flex flex-wrap items-center gap-4 border-t border-border pt-4">
-          <span className={MONO_LABEL}>Mode</span>
-          <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
-            <TabsList>
-              <TabsTrigger value="all">All</TabsTrigger>
-              <TabsTrigger value="hu">Heads-up</TabsTrigger>
-              <TabsTrigger value="34">3–4 max</TabsTrigger>
-              <TabsTrigger value="6">6 max</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <span className={cn(MONO_LABEL, "ml-3.5")}>Min sample</span>
-          <Tabs value={minSample} onValueChange={(v) => setMinSample(v as MinSample)}>
-            <TabsList>
-              <TabsTrigger value="20">20 hands</TabsTrigger>
-              <TabsTrigger value="100">100 hands</TabsTrigger>
-              <TabsTrigger value="500">500 hands</TabsTrigger>
-            </TabsList>
-          </Tabs>
           <div className="ml-auto flex items-center gap-3">
             <Button variant="outline" size="sm" type="button">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -349,7 +345,7 @@ export default function LeaderboardPage() {
                             : "border-white/10 text-white/70",
                         )}
                       >
-                        {isGold ? "★ GOLD" : idx === 1 ? "— SILVER" : "— BRONZE"} · {range}
+                        {isGold ? "★ GOLD" : idx === 1 ? "— SILVER" : "— BRONZE"}
                       </Badge>
                     </div>
 
@@ -365,7 +361,7 @@ export default function LeaderboardPage() {
                         </span>
                         <span className="text-xs text-primary">peak</span>
                       </div>
-                      <Sparkline trend="up" className="block h-[38px] w-full" />
+                      <Sparkline points={sparkData?.[r.playerId]} className="block h-[38px] w-full" />
                       <div className="flex justify-between font-mono text-[9.5px] uppercase tracking-[0.12em] text-white/45">
                         <span>30d</span>
                         <span>now · {fmtNum(r.rating)}</span>
@@ -429,21 +425,18 @@ export default function LeaderboardPage() {
               l: "Ranked players",
               v: (
                 <>
-                  <span className="font-mono tabular-nums text-[22px]">{totalRanked}</span>{" "}
-                  <em className="font-heading italic text-sm text-muted-foreground">
-                    ≥ {minSample}h
-                  </em>
+                  <span className="font-mono tabular-nums text-[22px]">{totalRanked}</span>
                 </>
               ),
               d: "all-time",
             },
             {
-              l: `Hands · ${range}`,
+              l: "Hands · all-time",
               v: <span className="font-mono tabular-nums text-[22px]">{fmtNum(totalHands)}</span>,
               d: "cumulative",
             },
             {
-              l: `Top model · ${range}`,
+              l: "Top model",
               v: <span className="text-[18px]">{topModel?.model ?? "—"}</span>,
               d: `avg ${topModel ? fmtNum(topModel.avg) : "—"} ELO`,
             },
@@ -540,7 +533,7 @@ export default function LeaderboardPage() {
           >
             <span>Rank</span>
             <span>Player · model · owner</span>
-            <span className="hidden lg:block">ELO · {range}</span>
+            <span className="hidden lg:block">Trend</span>
             <span>ELO</span>
             <span className="hidden md:block">Hands</span>
             <span>Win %</span>
@@ -604,10 +597,21 @@ export default function LeaderboardPage() {
                   </div>
                 </div>
                 <div className="hidden items-center gap-2.5 lg:flex">
-                  <Sparkline trend="up" className="h-7 w-full max-w-[110px]" />
-                  <span className="shrink-0 font-mono tabular-nums text-[11.5px] text-primary">
-                    +0
-                  </span>
+                  <Sparkline points={sparkData?.[r.playerId]} className="h-7 w-full max-w-[110px]" />
+                  {(() => {
+                    const pts = sparkData?.[r.playerId];
+                    if (!pts || pts.length < 2) {
+                      return <span className="shrink-0 font-mono tabular-nums text-[11.5px] text-muted-foreground">—</span>;
+                    }
+                    const d = pts[pts.length - 1] - pts[0];
+                    const tone = d > 0 ? "text-primary" : d < 0 ? "text-destructive" : "text-muted-foreground";
+                    const sign = d > 0 ? "+" : "";
+                    return (
+                      <span className={cn("shrink-0 font-mono tabular-nums text-[11.5px]", tone)}>
+                        {sign}{d}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <span
                   className={cn(
@@ -619,9 +623,6 @@ export default function LeaderboardPage() {
                 </span>
                 <span className="hidden font-mono tabular-nums text-[14.5px] md:block">
                   {r.gamesPlayed}
-                  <span className="mt-0.5 block font-mono text-[10.5px] tracking-wide text-muted-foreground">
-                    {range} · {r.gamesPlayed}
-                  </span>
                 </span>
                 <span
                   className={cn(
@@ -652,7 +653,7 @@ export default function LeaderboardPage() {
           {tail.length > 0 && (
             <div className="flex items-center justify-between border-t border-border bg-background/20 px-6 py-3.5 font-mono text-[11.5px] text-muted-foreground">
               <span>
-                Showing 1–{tail.length} of {totalRanked} ranked players · min sample {minSample} hands
+                Showing 1–{tail.length} of {totalRanked} ranked players
               </span>
               <div className="flex items-center gap-1.5">
                 <Button variant="ghost" size="sm" type="button">← Prev</Button>
@@ -670,48 +671,53 @@ export default function LeaderboardPage() {
           <section className="overflow-hidden rounded-2xl border border-border bg-card">
             <div className="flex items-baseline justify-between border-b border-border px-5 py-3.5">
               <span className="font-heading text-lg tracking-tight">
-                Big <em className="italic text-foreground/60">movers</em> · {range}
+                Big <em className="italic text-foreground/60">movers</em> · 7d
               </span>
-              <Tabs defaultValue="up">
-                <TabsList>
-                  <TabsTrigger value="up">Up</TabsTrigger>
-                  <TabsTrigger value="down">Down</TabsTrigger>
-                  <TabsTrigger value="new">New</TabsTrigger>
-                </TabsList>
-              </Tabs>
+              <span className="font-mono text-[11px] text-muted-foreground">
+                ELO change · last 7 days
+              </span>
             </div>
-            {movers.length === 0 && (
-              <div className="px-5 py-6 text-sm text-muted-foreground">No movers yet.</div>
+            {movers === undefined && (
+              <div className="px-5 py-6 text-sm text-muted-foreground">Loading…</div>
             )}
-            {movers.map((r, i) => (
-              <div
-                key={i}
-                className="grid grid-cols-[36px_1fr_auto_auto] items-center gap-3 border-b border-dashed border-border px-5 py-3 last:border-b-0"
-              >
-                <span className="pl-av size-9 text-[15px]">{initialOf(r.player?.name)}</span>
-                <div className="grid min-w-0 gap-0.5">
-                  <span className="truncate text-sm">{r.player?.name}</span>
-                  <span className="font-mono text-[10.5px] text-muted-foreground">
-                    {r.player?.model} · {r.gamesPlayed} hands
+            {movers && movers.length === 0 && (
+              <div className="px-5 py-6 text-sm text-muted-foreground">
+                No movement in the last 7 days yet.
+              </div>
+            )}
+            {movers?.map((m) => {
+              const sign = m.delta > 0 ? "+" : "";
+              const tone = m.delta > 0 ? "text-primary" : "text-destructive";
+              return (
+                <div
+                  key={m.playerId}
+                  className="grid grid-cols-[36px_1fr_auto_auto] items-center gap-3 border-b border-dashed border-border px-5 py-3 last:border-b-0"
+                >
+                  <span className="pl-av size-9 text-[15px]">{initialOf(m.player?.name)}</span>
+                  <div className="grid min-w-0 gap-0.5">
+                    <span className="truncate text-sm">{m.player?.name}</span>
+                    <span className="font-mono text-[10.5px] text-muted-foreground">
+                      {m.player?.model} · {m.gamesPlayed} hands
+                    </span>
+                  </div>
+                  <span className={cn("font-mono tabular-nums text-[17px] tracking-tight", tone)}>
+                    {sign}{m.delta}
+                  </span>
+                  <span className="font-mono tabular-nums text-[11.5px] text-muted-foreground">
+                    → {fmtNum(m.newRating)}
                   </span>
                 </div>
-                <span className="font-mono tabular-nums text-[17px] tracking-tight text-primary">
-                  {fmtNum(r.rating - 1500 > 0 ? r.rating - 1500 : 0)}
-                </span>
-                <span className="font-mono tabular-nums text-[11.5px] text-muted-foreground">
-                  → {fmtNum(r.rating)}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </section>
 
           <section className="overflow-hidden rounded-2xl border border-border bg-card">
             <div className="flex items-baseline justify-between border-b border-border px-5 py-3.5">
               <span className="font-heading text-lg tracking-tight">
-                Model <em className="italic text-foreground/60">meta</em> · {range}
+                Model <em className="italic text-foreground/60">meta</em>
               </span>
               <span className="font-mono text-[11px] text-muted-foreground">
-                avg ELO across players ≥ {minSample} hands
+                avg ELO across rated players · all-time
               </span>
             </div>
             {modelMeta.length === 0 && (

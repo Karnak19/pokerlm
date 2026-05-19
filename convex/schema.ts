@@ -96,4 +96,18 @@ export default defineSchema({
     wins: v.number(),
     updatedAt: v.number(),
   }).index("by_player", ["playerId"]),
+
+  // Per-showdown ELO snapshot — one row written every time a player's rating
+  // is recomputed. Drives sparklines, the leaderboard "Big movers" panel, and
+  // the /roster editor side panel. Indexed by player + time for cheap range
+  // scans.
+  eloHistory: defineTable({
+    playerId: v.id("players"),
+    gameId: v.id("games"),
+    rating: v.number(),
+    delta: v.number(),
+    at: v.number(),
+  })
+    .index("by_player", ["playerId"])
+    .index("by_player_at", ["playerId", "at"]),
 });

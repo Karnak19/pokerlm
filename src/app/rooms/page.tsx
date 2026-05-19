@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { SiteShell } from "@/components/site-shell";
@@ -13,7 +14,6 @@ import {
   CardHeader,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 function SearchIcon() {
@@ -37,9 +37,17 @@ function SearchIcon() {
 
 export default function RoomsPage() {
   const rooms = useQuery(api.rooms.listOpen);
+  const [search, setSearch] = useState("");
 
   const loading = rooms === undefined;
-  const joinable = rooms ?? [];
+  const joinable = useMemo(() => {
+    const all = rooms ?? [];
+    const q = search.trim().toLowerCase();
+    if (!q) return all;
+    return all.filter((r) =>
+      r.name.toLowerCase().includes(q) || r._id.toLowerCase().includes(q),
+    );
+  }, [rooms, search]);
 
   return (
     <SiteShell footerNote={`${joinable.length} open · ${rooms === undefined ? "…" : rooms.length} total`}>
@@ -86,113 +94,21 @@ export default function RoomsPage() {
           </div>
         </header>
 
-        {/* TOOLBAR */}
-        <div className="grid grid-cols-1 items-center gap-3.5 border-b border-border py-5 lg:grid-cols-[1fr_auto_auto]">
+        {/* TOOLBAR — sort/view/filter chips removed; they were inert.
+            Reintroduce when there's actual sorting/filtering logic to wire. */}
+        <div className="border-b border-border py-5">
           <div className="relative w-full max-w-[420px]">
             <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
               <SearchIcon />
             </span>
             <Input
               type="text"
-              placeholder={`Search rooms · "Salon", model, host, room ID…`}
+              placeholder="Search by name or room id…"
               className="pl-9"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-              Sort
-            </span>
-            <Tabs defaultValue="newest">
-              <TabsList>
-                <TabsTrigger value="newest">Newest</TabsTrigger>
-                <TabsTrigger value="filling">Filling</TabsTrigger>
-                <TabsTrigger value="stakes">
-                  Stakes <span className="font-mono">↓</span>
-                </TabsTrigger>
-                <TabsTrigger value="avgpot">Avg pot</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-              View
-            </span>
-            <Tabs defaultValue="grid">
-              <TabsList>
-                <TabsTrigger value="grid">
-                  <svg
-                    width="13"
-                    height="13"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <rect x="3" y="3" width="7" height="7" />
-                    <rect x="14" y="3" width="7" height="7" />
-                    <rect x="3" y="14" width="7" height="7" />
-                    <rect x="14" y="14" width="7" height="7" />
-                  </svg>
-                  Grid
-                </TabsTrigger>
-                <TabsTrigger value="list">
-                  <svg
-                    width="13"
-                    height="13"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <line x1="3" y1="6" x2="21" y2="6" />
-                    <line x1="3" y1="12" x2="21" y2="12" />
-                    <line x1="3" y1="18" x2="21" y2="18" />
-                  </svg>
-                  List
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
-        </div>
-
-        {/* FILTER CHIPS */}
-        <div className="flex flex-wrap items-center gap-2 py-4.5">
-          <span className="mr-1.5 self-center font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-            Filters
-          </span>
-          <Badge variant="default" className="cursor-pointer">
-            Joinable <span className="ml-1 opacity-70">✕</span>
-          </Badge>
-          <Badge variant="outline" className="cursor-pointer">
-            Live now
-          </Badge>
-          <Badge variant="outline" className="cursor-pointer">
-            Heads-up
-          </Badge>
-          <Badge variant="outline" className="cursor-pointer">
-            3–6 seats
-          </Badge>
-          <Badge variant="outline" className="cursor-pointer">
-            Stakes{" "}
-            <span className="ml-1 font-mono tabular-nums">≤ 100/200</span>
-          </Badge>
-          <Badge variant="outline" className="cursor-pointer">
-            Buy-in{" "}
-            <span className="ml-1 font-mono tabular-nums">$1k–$5k</span>
-          </Badge>
-          <Badge variant="default" className="cursor-pointer">
-            My friends only <span className="ml-1 opacity-70">✕</span>
-          </Badge>
-          <Badge
-            variant="outline"
-            className="cursor-pointer border-dashed text-muted-foreground"
-          >
-            + Add filter
-          </Badge>
         </div>
 
         {/* SECTION · JOINABLE */}

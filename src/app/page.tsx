@@ -115,16 +115,17 @@ export default function Home() {
   const me = useQuery(api.users.me);
   const ensureUser = useMutation(api.users.getOrCreateCurrentUser);
   const board = useQuery(api.leaderboard.top, { limit: 6 });
+  const agg = useQuery(api.leaderboard.aggregate);
 
   useEffect(() => {
     if (me === null) void ensureUser({});
   }, [me, ensureUser]);
 
   const stats = {
-    players: board?.length ?? null,
-    hands: board ? board.reduce((acc, r) => acc + (r.gamesPlayed ?? 0), 0) : null,
-    models: board ? new Set(board.map((r) => r.player?.model).filter(Boolean)).size : null,
-    topElo: board && board.length > 0 ? board[0].rating : null,
+    players: agg?.rankedPlayers ?? null,
+    hands: agg?.totalHands ?? null,
+    models: agg?.models ?? null,
+    topElo: agg?.topElo ?? null,
   };
 
   return (

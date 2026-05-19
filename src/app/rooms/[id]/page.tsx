@@ -104,6 +104,18 @@ const SEAT_STYLE: CSSProperties[] = [
   { top: "28%", left: -30, transform: "translateY(-50%)" },
 ];
 
+// Approximate seat → pot-center offset in px (table is ~540px tall, ~1100px wide
+// at the default xl breakpoint). The chip-fly animates from these deltas toward
+// (0, 0) at table center. Approximate is fine — the chip is decorative.
+const SEAT_OFFSET_FROM_CENTER: Array<[number, number]> = [
+  [0, -240],     // 0 top
+  [430, -110],   // 1 top right
+  [430, 110],    // 2 bottom right
+  [0, 240],      // 3 bottom
+  [-430, 110],   // 4 bottom left
+  [-430, -110],  // 5 top left
+];
+
 const HOLE_STYLE: CSSProperties[] = [
   { bottom: -22, left: "50%", transform: "translateX(-50%)" },
   { right: "100%", top: "50%", marginRight: 8, transform: "translateY(-50%)" },
@@ -153,6 +165,28 @@ export default function RoomPage() {
     return sessionStorage.getItem("pokerlm.openrouter.key") ?? "";
   }, []);
   const deciding = useRef<string | null>(null);
+
+  // Chip-fly queue: each entry is a short-lived flight from a seat to the pot.
+  type ChipFlight = { id: number; seatIndex: number; amount: number };
+  const [flights, setFlights] = useState<ChipFlight[]>([]);
+  const lastSeenActionId = useRef<string | null>(null);
+
+  /* eslint-disable react-hooks/set-state-in-effect -- enqueue a transient animation in response to new actions arriving */
+  useEffect(() => {
+    const actions = game?.recentActions;
+    if (!actions || actions.length === 0) return;
+    const newest = actions[actions.length - 1];
+    const tag = `${newest._id}`;
+    if (lastSeenActionId.current === tag) return;
+    const first = lastSeenActionId.current === null;
+    lastSeenActionId.current = tag;
+    // On first mount, prime the marker without animating historical bets.
+    if (first) return;
+    const chipKinds = new Set(["bet", "raise", "call", "all_in"]);
+    if (!chipKinds.has(newest.kind)) return;
+    setFlights((f) => [...f, { id: newest._creationTime, seatIndex: newest.seatIndex, amount: newest.amount }]);
+  }, [game?.recentActions]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const mySeat = me && room ? room.seats.find((s) => s.userId === me._id) : undefined;
   const isCreator = !!me && !!room && me._id === room.createdBy;
@@ -475,11 +509,24 @@ export default function RoomPage() {
                         "absolute grid min-w-[180px] max-w-[220px] grid-cols-[44px_1fr] items-center gap-2.5 rounded-[14px] border bg-background/60 px-3 py-2.5 backdrop-blur-sm",
                         "border-white/10",
                         isToAct && "border-primary/60 shadow-[0_0_0_1px_color-mix(in_oklch,var(--primary)_30%,transparent),0_0_28px_-4px_color-mix(in_oklch,var(--primary)_50%,transparent)]",
-                        isYou && "border-chip/50 shadow-[0_0_0_1px_color-mix(in_oklch,var(--chip)_25%,transparent),0_0_22px_-8px_color-mix(in_oklch,var(--chip)_40%,transparent)]",
+                        isYou && !isToAct && "border-chip/50 shadow-[0_0_0_1px_color-mix(in_oklch,var(--chip)_25%,transparent),0_0_22px_-8px_color-mix(in_oklch,var(--chip)_40%,transparent)]",
                         folded && "opacity-50",
                       )}
                       style={SEAT_STYLE[pos]}
                     >
+                      {/* Active-seat pulse — soft halo loop while this seat is thinking */}
+                      {isToAct && !folded && (
+                        <motion.span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute inset-0 rounded-[14px]"
+                          style={{
+                            boxShadow: "0 0 0 2px color-mix(in oklch, var(--primary) 55%, transparent)",
+                          }}
+                          initial={{ opacity: 0.4, scale: 1 }}
+                          animate={{ opacity: [0.4, 0, 0.4], scale: [1, 1.04, 1] }}
+                          transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+                        />
+                      )}
                       <Avatar className="pl-av size-11 text-lg">
                         <AvatarFallback className="bg-transparent">{initial}</AvatarFallback>
                       </Avatar>
@@ -558,6 +605,37 @@ export default function RoomPage() {
                     D
                   </span>
                 )}
+
+                {/* Chip flights — short-lived motion chips from seat → pot when someone bets */}
+                <div
+                  className="pointer-events-none absolute left-1/2 top-1/2"
+                  style={{ width: 0, height: 0 }}
+                  aria-hidden="true"
+                >
+                  <AnimatePresence>
+                    {flights.map((f) => {
+                      const [ox, oy] = SEAT_OFFSET_FROM_CENTER[f.seatIndex] ?? [0, 0];
+                      return (
+                        <motion.div
+                          key={f.id}
+                          className="absolute -translate-x-1/2 -translate-y-1/2"
+                          initial={{ x: ox, y: oy, opacity: 0, scale: 0.5 }}
+                          animate={{ x: 0, y: 0, opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.4 }}
+                          transition={{ duration: 0.55, ease: [0.4, 0.0, 0.2, 1] }}
+                          onAnimationComplete={() => {
+                            setFlights((arr) => arr.filter((x) => x.id !== f.id));
+                          }}
+                        >
+                          <span className="flex items-center gap-1.5 rounded-full bg-background/85 px-1 pr-2.5 py-0.5 font-mono tabular-nums text-[11px] text-white shadow-[0_8px_24px_-12px_color-mix(in_oklch,black_80%,transparent)] backdrop-blur-sm">
+                            <span className="pl-chip !size-[16px]" />
+                            <span>${f.amount}</span>
+                          </span>
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
+                </div>
 
                 {/* Center stage */}
                 <div className="absolute left-1/2 top-1/2 grid -translate-x-1/2 -translate-y-1/2 place-items-center gap-4">

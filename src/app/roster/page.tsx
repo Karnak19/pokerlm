@@ -57,12 +57,40 @@ function splitLastWord(name: string): { head: string; tail: string } {
   return { head: trimmed.slice(0, idx), tail: trimmed.slice(idx + 1) };
 }
 
+function fmtInt(n: number | null | undefined): string {
+  if (n === undefined || n === null || Number.isNaN(n)) return "—";
+  return Math.round(n).toLocaleString("en-US");
+}
+
+function joinedAt(ts: number | undefined): string {
+  if (!ts) return "—";
+  return new Date(ts).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}
+
 export default function PlayersPage() {
   const players = useQuery(api.players.listMine);
   const me = useQuery(api.users.me);
+  const myElo = useQuery(api.leaderboard.mine);
   const create = useMutation(api.players.create);
   const update = useMutation(api.players.update);
   const remove = useMutation(api.players.remove);
+
+  const eloByPlayer = useMemo(() => {
+    const m = new Map<string, { rating: number; gamesPlayed: number; wins: number }>();
+    for (const r of myElo ?? []) m.set(r.playerId, r);
+    return m;
+  }, [myElo]);
+
+  const totals = useMemo(() => {
+    if (!myElo || myElo.length === 0) return { peak: null, hands: 0 };
+    let peak = -Infinity;
+    let hands = 0;
+    for (const r of myElo) {
+      if (r.rating > peak) peak = r.rating;
+      hands += r.gamesPlayed;
+    }
+    return { peak, hands };
+  }, [myElo]);
 
   const [name, setName] = useState("");
   const [model, setModel] = useState(CURATED_MODELS[0].id);
@@ -181,22 +209,22 @@ export default function PlayersPage() {
                 {displayName} <em className="italic">m.</em>
               </span>
               <span className="font-mono text-[11px] text-muted-foreground">
-                {userEmail} · member since Apr 2025
+                {userEmail} · member since {joinedAt(me?._creationTime)}
               </span>
               <div className="mt-1 flex items-center gap-3 font-mono text-[11.5px] tabular-nums text-foreground">
                 <span>
                   <span className="mr-1 text-[9.5px] uppercase tracking-[0.12em] text-muted-foreground">PEAK</span>
-                  1,842 ELO
+                  {fmtInt(totals.peak)} ELO
                 </span>
                 <span className="text-muted-foreground/50">·</span>
                 <span>
                   <span className="mr-1 text-[9.5px] uppercase tracking-[0.12em] text-muted-foreground">HANDS</span>
-                  2,074
+                  {fmtInt(totals.hands)}
                 </span>
                 <span className="text-muted-foreground/50">·</span>
                 <span>
-                  <span className="mr-1 text-[9.5px] uppercase tracking-[0.12em] text-muted-foreground">NET</span>
-                  <span className="text-chip">+$18,240</span>
+                  <span className="mr-1 text-[9.5px] uppercase tracking-[0.12em] text-muted-foreground">RATED</span>
+                  {fmtInt(myElo?.length ?? 0)}
                 </span>
               </div>
             </div>
@@ -215,13 +243,11 @@ export default function PlayersPage() {
         </Show>
 
         <Show when="signed-in">
-          {/* STAT STRIP */}
-          <div className="my-2 mb-9 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-3 lg:grid-cols-5">
-            <StatCell label="Players · roster" value={String(playerCount)} suffix="active" delta="+1 this week" />
-            <StatCell label="Hands this week" value="312" delta="+42 vs last" />
-            <StatCell label="Win rate · 7d" value="54.1%" delta="+1.8 pts" />
-            <StatCell label="Net · 7d" value="+$8,420" valueClass="text-chip" delta="across 4 players" className="hidden lg:grid" />
-            <StatCell label="OpenRouter spend" value="$12.40" delta="≈ $0.04 / hand" className="hidden lg:grid" />
+          {/* STAT STRIP — only honest, derived numbers; no fake deltas */}
+          <div className="my-2 mb-9 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-3">
+            <StatCell label="Players · roster" value={fmtInt(playerCount)} />
+            <StatCell label="Rated" value={fmtInt(myElo?.length ?? 0)} />
+            <StatCell label="Hands · all-time" value={fmtInt(totals.hands)} />
           </div>
 
           {/* SECTION HEAD */}
@@ -271,10 +297,11 @@ export default function PlayersPage() {
             {players === undefined && (
               <div className="rounded-xl border border-border bg-card p-6 text-muted-foreground">Loading…</div>
             )}
-            {players?.map((p, i) => {
+            {players?.map((p) => {
               const initial = p.name.trim().charAt(0).toUpperCase() || "?";
               const isEditing = editingId === p._id;
-              const isLive = i === 0;
+              const elo = eloByPlayer.get(p._id);
+              const winRate = elo && elo.gamesPlayed > 0 ? (elo.wins / elo.gamesPlayed) * 100 : null;
               const { head, tail } = splitLastWord(p.name);
               return (
                 <article
@@ -286,16 +313,6 @@ export default function PlayersPage() {
                       : "border-border")
                   }
                 >
-                  {isLive && (
-                    <span
-                      className="absolute -top-px left-6 right-6 h-px"
-                      style={{
-                        background:
-                          "linear-gradient(90deg, transparent 0%, color-mix(in oklch, var(--primary) 70%, transparent) 50%, transparent 100%)",
-                      }}
-                      aria-hidden
-                    />
-                  )}
                   <div className="grid grid-cols-[44px_1fr_auto] items-start gap-3">
                     <span
                       className="pl-av size-11 text-lg"
@@ -348,11 +365,19 @@ export default function PlayersPage() {
                     {p.systemPrompt}
                   </p>
 
-                  <div className="grid grid-cols-4 gap-3 border-y border-dashed border-border py-3">
-                    <StatCell mini label="ELO" value="1,500" valueClass="text-primary" />
-                    <StatCell mini label="Hands" value="0" />
-                    <StatCell mini label="Win %" value="—" />
-                    <StatCell mini label="Net" value="$0" />
+                  <div className="grid grid-cols-3 gap-3 border-y border-dashed border-border py-3">
+                    <StatCell
+                      mini
+                      label="ELO"
+                      value={elo ? fmtInt(elo.rating) : "—"}
+                      valueClass={elo ? "text-primary" : undefined}
+                    />
+                    <StatCell mini label="Hands" value={elo ? fmtInt(elo.gamesPlayed) : "—"} />
+                    <StatCell
+                      mini
+                      label="Win %"
+                      value={winRate !== null ? `${winRate.toFixed(1)}%` : "—"}
+                    />
                   </div>
 
                   <div className="flex items-center justify-between gap-3">
@@ -366,21 +391,10 @@ export default function PlayersPage() {
                           <span className="text-muted-foreground/50">·</span>
                           <span>unsaved</span>
                         </>
-                      ) : isLive ? (
-                        <>
-                          <Badge variant="outline" className="border-primary/35 text-primary">
-                            <span className="size-1.5 rounded-full bg-primary" />
-                            idle
-                          </Badge>
-                          <span className="text-muted-foreground/50">·</span>
-                          <span>just now</span>
-                        </>
+                      ) : elo ? (
+                        <span>{fmtInt(elo.gamesPlayed)} hands played</span>
                       ) : (
-                        <>
-                          <span>idle</span>
-                          <span className="text-muted-foreground/50">·</span>
-                          <span>—</span>
-                        </>
+                        <span>no hands played yet</span>
                       )}
                     </span>
                     <div className="flex gap-1.5">
