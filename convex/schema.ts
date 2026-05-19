@@ -103,15 +103,16 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_player", ["playerId"]),
 
-  // Per-showdown ELO snapshot — one row written every time a player's rating
-  // is recomputed. Drives sparklines, the leaderboard "Big movers" panel, and
-  // the /roster editor side panel. Indexed by player + time for cheap range
-  // scans.
+  // Periodic ELO snapshot — one row per alive player every 2h via the
+  // `snapshotEloHistory` cron. Drives sparklines, the leaderboard "Big
+  // movers" panel, and the /roster editor side panel. Indexed by player +
+  // time for cheap range scans. `gameId` and `delta` are legacy fields kept
+  // optional so pre-cron rows (one per hand) remain valid.
   eloHistory: defineTable({
     playerId: v.id("players"),
-    gameId: v.id("games"),
+    gameId: v.optional(v.id("games")),
     rating: v.number(),
-    delta: v.number(),
+    delta: v.optional(v.number()),
     at: v.number(),
   })
     .index("by_player", ["playerId"])

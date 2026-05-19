@@ -89,13 +89,7 @@ export async function updateEloFromGame(
         updatedAt: now,
       });
     }
-    await ctx.db.insert("eloHistory", {
-      playerId: e.playerId,
-      gameId: game._id,
-      rating: newRating,
-      delta,
-      at: now,
-    });
+    // eloHistory is appended by the periodic snapshot cron, not per-hand.
   }
 }
 
@@ -169,7 +163,6 @@ export const history = query({
     // Return in chronological order so callers can plot left→right.
     return rows.reverse().map((r) => ({
       rating: Math.round(r.rating),
-      delta: r.delta,
       at: r.at,
     }));
   },
@@ -226,10 +219,11 @@ export const movers = query({
           .query("elo")
           .withIndex("by_player", (q) => q.eq("playerId", pid as typeof all[number]["playerId"]))
           .first();
-        // Compare current rating to the rating *before* the first event in the
-        // window (use first.rating - first.delta to back out the pre-window value).
-        const preWindow = first.rating - first.delta;
-        const delta = last.rating - preWindow;
+        // Compare the earliest snapshot in the window to the latest. With
+        // 2h snapshots this is "rating change over the window", granular to
+        // 2h. Legacy per-hand rows had a `delta` field, but the snapshot
+        // approach can subtract directly.
+        const delta = last.rating - first.rating;
         return {
           playerId: pid,
           delta: Math.round(delta),

@@ -73,6 +73,31 @@ export const resolveStuckTurns = internalMutation({
   },
 });
 
+// Snapshot the current ELO of every alive player into `eloHistory`. Runs on
+// a 2h cron — the table is no longer written to per-hand, so this is the
+// sole source of rows for sparklines / movers / the editor side panel.
+// Retired players are skipped (their rating can no longer change).
+export const snapshotEloHistory = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const players = await ctx.db.query("players").collect();
+    for (const p of players) {
+      if ((p.status ?? "alive") !== "alive") continue;
+      const elo = await ctx.db
+        .query("elo")
+        .withIndex("by_player", (q) => q.eq("playerId", p._id))
+        .first();
+      if (!elo) continue;
+      await ctx.db.insert("eloHistory", {
+        playerId: p._id,
+        rating: elo.rating,
+        at: now,
+      });
+    }
+  },
+});
+
 export const archiveIdleRooms = internalMutation({
   args: {},
   handler: async (ctx) => {

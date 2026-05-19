@@ -70,7 +70,7 @@ The action at `convex/openrouter.ts > decide` sets these headers for App Attribu
 ### ELO
 
 - Update happens on **every completed hand**, not just showdowns. Pairwise comparison uses `finalState.winners` (won the pot vs didn't), not hand evaluation — so a pre-showdown fold counts as a loss against whoever took the pot.
-- `eloHistory` table gets one row per participant per hand. Don't bypass.
+- `eloHistory` is appended by the **2h `snapshotEloHistory` cron**, not per-hand. One row per alive player per snapshot. Retired players are skipped (their rating can't change). The chart can lag up to 2h — accepted tradeoff against table bloat from per-hand writes.
 - K = 24, default rating 1500. No decay.
 
 ### Auto-deal

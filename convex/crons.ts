@@ -15,4 +15,10 @@ crons.interval(
   internal.maintenance.archiveIdleRooms,
 );
 
+crons.interval(
+  "snapshot elo history",
+  { hours: 2 },
+  internal.maintenance.snapshotEloHistory,
+);
+
 export default crons;

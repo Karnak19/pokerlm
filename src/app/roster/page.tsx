@@ -124,7 +124,7 @@ export default function PlayersPage() {
     const inWindow = editingHistory.filter((p) => p.at >= sevenDayAgo);
     if (inWindow.length < 2) return { peak, sevenDayDelta: null };
     const sevenDayDelta =
-      inWindow[inWindow.length - 1].rating - (inWindow[0].rating - inWindow[0].delta);
+      inWindow[inWindow.length - 1].rating - inWindow[0].rating;
     return { peak, sevenDayDelta };
   }, [editingHistory]);
   const [submitting, setSubmitting] = useState(false);
