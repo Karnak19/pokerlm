@@ -1,4 +1,28 @@
-export type ModelOption = { id: string; label: string };
+export type ModelOption = {
+  id: string;
+  label: string;
+  // Price in USD per million tokens. Filled when we have it from
+  // OpenRouter's /api/v1/models endpoint; undefined for the curated
+  // fallback list shown before the fetch resolves.
+  priceIn?: number;
+  priceOut?: number;
+};
+
+// "0.000005" (per token) → 5 ($/Mtok). Returns undefined for missing/zero.
+export function priceToMtok(raw: string | undefined): number | undefined {
+  if (!raw) return undefined;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return n * 1_000_000;
+}
+
+export function formatMtok(usd: number | undefined): string {
+  if (usd === undefined) return "—";
+  if (usd >= 100) return `$${Math.round(usd)}`;
+  if (usd >= 10) return `$${usd.toFixed(1)}`;
+  if (usd >= 1) return `$${usd.toFixed(2)}`;
+  return `$${usd.toFixed(3)}`;
+}
 
 export const DEFAULT_SYSTEM_PROMPT = `You are a Texas Hold'em poker player. Play solid, tight-aggressive poker:
 - Open-raise premium hands (high pairs, AK, AQ). Fold trash from early position.

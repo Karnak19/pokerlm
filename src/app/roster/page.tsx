@@ -3,7 +3,7 @@
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { useEffect, useMemo, useState } from "react";
-import { CURATED_MODELS, DEFAULT_SYSTEM_PROMPT, type ModelOption } from "@/lib/models";
+import { CURATED_MODELS, DEFAULT_SYSTEM_PROMPT, priceToMtok, type ModelOption } from "@/lib/models";
 import { Id } from "../../../convex/_generated/dataModel";
 import { Show, SignInButton } from "@clerk/nextjs";
 import { ModelCombobox } from "@/components/model-combobox";
@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MoreVertical, Plus, Upload, Search, Archive, Trash2, ArrowRight } from "lucide-react";
 import { RatingChart } from "@/components/rating-chart";
+import { PlayerAvatar } from "@/components/player-avatar";
 
 type OpenRouterModel = {
   id: string;
@@ -128,7 +129,12 @@ export default function PlayersPage() {
       .then((data: { data: OpenRouterModel[] }) => {
         if (cancelled) return;
         const list: ModelOption[] = data.data
-          .map((m) => ({ id: m.id, label: m.name ?? m.id }))
+          .map((m) => ({
+            id: m.id,
+            label: m.name ?? m.id,
+            priceIn: priceToMtok(m.pricing?.prompt),
+            priceOut: priceToMtok(m.pricing?.completion),
+          }))
           .sort((a, b) => a.label.localeCompare(b.label));
         setModels(list);
       })
@@ -334,16 +340,16 @@ export default function PlayersPage() {
                   }
                 >
                   <div className="grid grid-cols-[44px_1fr_auto] items-start gap-3">
-                    <span
-                      className="pl-av size-11 text-lg"
+                    <PlayerAvatar
+                      seed={p._id}
+                      fallback={initial}
+                      size={44}
                       style={
                         isEditing
-                          ? ({ ["--pl-av-color" as string]: "var(--chip)", color: "var(--chip)", borderColor: "color-mix(in oklch, var(--chip) 45%, transparent)" } as React.CSSProperties)
+                          ? { borderColor: "color-mix(in oklch, var(--chip) 55%, transparent)" }
                           : undefined
                       }
-                    >
-                      {initial}
-                    </span>
+                    />
                     <div className="grid min-w-0 gap-0.5">
                       <h3 className="m-0 truncate font-heading text-[22px] font-normal leading-tight tracking-tight">
                         {head ? (

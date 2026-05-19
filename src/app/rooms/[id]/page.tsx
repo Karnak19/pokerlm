@@ -17,6 +17,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
+import { PlayerAvatar } from "@/components/player-avatar";
 import {
   Dialog,
   DialogContent,
@@ -527,9 +528,11 @@ export default function RoomPage() {
                           transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
                         />
                       )}
-                      <Avatar className="pl-av size-11 text-lg">
-                        <AvatarFallback className="bg-transparent">{initial}</AvatarFallback>
-                      </Avatar>
+                      <PlayerAvatar
+                        seed={seat.playerId}
+                        fallback={initial}
+                        size={44}
+                      />
                       <div className="grid min-w-0 gap-0.5">
                         <span className="truncate text-[13.5px] text-white/95">
                           {seat.player?.name ?? "?"}
@@ -721,9 +724,11 @@ export default function RoomPage() {
                     <div key={a._id} className="grid gap-2 rounded-[10px] border border-border bg-background/30 px-3.5 py-3">
                       <div className="flex items-center justify-between gap-2 text-[12.5px]">
                         <span className="flex items-center gap-1.5">
-                          <Avatar className="pl-av size-[22px] text-[11px]">
-                            <AvatarFallback className="bg-transparent">{initial}</AvatarFallback>
-                          </Avatar>
+                          <PlayerAvatar
+                            seed={seat?.playerId ?? `seat-${a.seatIndex}`}
+                            fallback={initial}
+                            size={22}
+                          />
                           {seat?.player?.name ?? `seat ${a.seatIndex + 1}`}
                         </span>
                         <span className="font-mono text-[10.5px] text-muted-foreground">{a.street}</span>
@@ -748,11 +753,11 @@ export default function RoomPage() {
                   <div className="grid gap-2 rounded-[10px] border border-primary/45 bg-primary/10 px-3.5 py-3">
                     <div className="flex items-center justify-between gap-2 text-[12.5px]">
                       <span className="flex items-center gap-1.5">
-                        <Avatar className="pl-av size-[22px] text-[11px]">
-                          <AvatarFallback className="bg-transparent">
-                            {(toActSeat.player?.name || "?").charAt(0).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
+                        <PlayerAvatar
+                          seed={toActSeat.playerId}
+                          fallback={(toActSeat.player?.name || "?").charAt(0).toUpperCase()}
+                          size={22}
+                        />
                         {toActSeat.player?.name}
                       </span>
                       <span className="font-mono text-[10.5px] text-muted-foreground">acting now</span>
@@ -869,9 +874,11 @@ export default function RoomPage() {
                         className="grid grid-cols-[60px_36px_1fr_auto_auto] items-center gap-3.5 border-b border-dashed border-border px-5 py-2.5 last:border-b-0"
                       >
                         <span className="font-mono text-[11px] text-muted-foreground">{a.street}</span>
-                        <Avatar className="pl-av size-[26px] text-xs">
-                          <AvatarFallback className="bg-transparent">{initial}</AvatarFallback>
-                        </Avatar>
+                        <PlayerAvatar
+                          seed={seat?.playerId ?? `seat-${a.seatIndex}`}
+                          fallback={initial}
+                          size={26}
+                        />
                         <span className="text-[13px] leading-snug">
                           <span className="mr-1 font-mono text-[11.5px] text-muted-foreground">
                             {seat?.player?.name ?? `seat ${a.seatIndex + 1}`}

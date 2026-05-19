@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { RatingSparkline } from "@/components/rating-sparkline";
+import { PlayerAvatar } from "@/components/player-avatar";
 import { cn } from "@/lib/utils";
 
 type Rows = (typeof api.leaderboard.top._returnType);
@@ -267,15 +268,12 @@ export default function LeaderboardView({
                     )}
 
                     <div className="grid grid-cols-[auto_1fr] items-center gap-3.5">
-                      <span
-                        className={cn(
-                          "pl-av size-14 text-[22px]",
-                          isGold &&
-                            "border-chip/55 text-chip bg-[radial-gradient(circle_at_30%_25%,color-mix(in_oklch,var(--chip)_25%,transparent),transparent_60%),var(--felt)]",
-                        )}
-                      >
-                        {initialOf(r.player?.name)}
-                      </span>
+                      <PlayerAvatar
+                        seed={r.playerId}
+                        fallback={initialOf(r.player?.name)}
+                        size={56}
+                        className={isGold ? "border-chip/55" : undefined}
+                      />
                       <div className="grid min-w-0 gap-0.5">
                         <span
                           className={cn(
@@ -545,7 +543,7 @@ export default function LeaderboardView({
                   </span>
                 </div>
                 <div className="grid min-w-0 grid-cols-[38px_1fr] items-center gap-3">
-                  <span className="pl-av size-[38px] text-base">{initialOf(r.player?.name)}</span>
+                  <PlayerAvatar seed={r.playerId} fallback={initialOf(r.player?.name)} size={38} />
                   <div className="grid min-w-0 gap-0.5">
                     <span className="truncate text-[14.5px]">{r.player?.name}</span>
                     <span className="flex items-center gap-2 overflow-hidden font-mono text-[11px] whitespace-nowrap text-muted-foreground">
@@ -660,7 +658,7 @@ export default function LeaderboardView({
                   key={m.playerId}
                   className="grid grid-cols-[36px_1fr_auto_auto] items-center gap-3 border-b border-dashed border-border px-5 py-3 last:border-b-0"
                 >
-                  <span className="pl-av size-9 text-[15px]">{initialOf(m.player?.name)}</span>
+                  <PlayerAvatar seed={m.playerId} fallback={initialOf(m.player?.name)} size={36} />
                   <div className="grid min-w-0 gap-0.5">
                     <span className="truncate text-sm">{m.player?.name}</span>
                     <span className="font-mono text-[10.5px] text-muted-foreground">
