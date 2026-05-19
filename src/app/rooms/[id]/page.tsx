@@ -18,6 +18,8 @@ import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import { PlayerAvatar } from "@/components/player-avatar";
+import { useCardSound, useChipSound, useSoundMute } from "@/lib/sounds";
+import { Volume2, VolumeX } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -88,6 +90,24 @@ function CardFace({ card, size = "lg" }: { card: string; size?: "sm" | "lg" }) {
 
 function CardBack({ size = "lg" }: { size?: "sm" | "lg" }) {
   return <div className={cn("pl-card-back rounded-[6px]", CARD_SIZE[size])} />;
+}
+
+function MuteToggle() {
+  const { isMuted, toggle, mounted } = useSoundMute();
+  // Render a neutral icon until mounted so SSR and CSR match.
+  const showMuted = mounted && isMuted;
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      onClick={toggle}
+      aria-label={showMuted ? "Unmute sounds" : "Mute sounds"}
+      title={showMuted ? "Unmute sounds" : "Mute sounds"}
+    >
+      {showMuted ? <VolumeX /> : <Volume2 />}
+    </Button>
+  );
 }
 
 // 6-seat oval positions, ordered clockwise from the top. Seat index N always
@@ -202,6 +222,8 @@ export default function RoomPage() {
   type ChipFlight = { id: number; seatIndex: number; amount: number };
   const [flights, setFlights] = useState<ChipFlight[]>([]);
   const lastSeenActionId = useRef<string | null>(null);
+  const playCard = useCardSound();
+  const playChip = useChipSound();
 
   /* eslint-disable react-hooks/set-state-in-effect -- enqueue a transient animation in response to new actions arriving */
   useEffect(() => {
@@ -217,8 +239,33 @@ export default function RoomPage() {
     const chipKinds = new Set(["bet", "raise", "call", "all_in"]);
     if (!chipKinds.has(newest.kind)) return;
     setFlights((f) => [...f, { id: newest._creationTime, seatIndex: newest.seatIndex, amount: newest.amount }]);
+    playChip();
   }, [game?.recentActions]);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Card sound on hand start. Tracks handNumber transitions; firing
+  // once per real new hand (not on initial mount).
+  const lastHandNumber = useRef<number | null>(null);
+  useEffect(() => {
+    const h = game?.handNumber ?? null;
+    if (h === null) return;
+    if (lastHandNumber.current === null) {
+      lastHandNumber.current = h;
+      return;
+    }
+    if (h !== lastHandNumber.current) {
+      lastHandNumber.current = h;
+      playCard();
+    }
+  }, [game?.handNumber]);
+
+  // Card sound on each new community card reveal (flop/turn/river).
+  const lastCommunityLen = useRef<number>(0);
+  useEffect(() => {
+    const n = game?.state?.community?.length ?? 0;
+    if (n > lastCommunityLen.current) playCard();
+    lastCommunityLen.current = n;
+  }, [game?.state?.community?.length]);
 
   const mySeat = me && room ? room.seats.find((s) => s.userId === me._id) : undefined;
   const isCreator = !!me && !!room && me._id === room.createdBy;
@@ -326,6 +373,7 @@ export default function RoomPage() {
             </div>
           </div>
           <div className="flex items-center gap-2.5">
+            <MuteToggle />
             {room.status === "waiting" && isCreator && room.seats.length >= 2 && (
               <Button onClick={() => start({ roomId })}>Start game</Button>
             )}
