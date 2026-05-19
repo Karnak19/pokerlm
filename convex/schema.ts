@@ -86,22 +86,6 @@ export default defineSchema({
     at: v.number(),
   }).index("by_game", ["gameId"]),
 
-  handHistories: defineTable({
-    gameId: v.id("games"),
-    roomId: v.id("rooms"),
-    handNumber: v.number(),
-    winners: v.array(v.object({
-      seatId: v.id("seats"),
-      playerId: v.id("players"),
-      amount: v.number(),
-    })),
-    finalPot: v.number(),
-    replayBlob: v.string(),
-    endedAt: v.number(),
-  })
-    .index("by_room", ["roomId"])
-    .index("by_game", ["gameId"]),
-
   elo: defineTable({
     playerId: v.id("players"),
     rating: v.number(),

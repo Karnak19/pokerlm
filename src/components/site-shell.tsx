@@ -23,7 +23,6 @@ const NAV = [
   { href: "/rooms", label: "Rooms" },
   { href: "/roster", label: "Roster" },
   { href: "/leaderboard", label: "Leaderboard" },
-  { href: "/replays", label: "Replays" },
 ] as const;
 
 const OR_STORAGE_KEY = "pokerlm.openrouter.key";

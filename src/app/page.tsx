@@ -143,8 +143,8 @@ export default function Home() {
           </h1>
           <p className="mt-7 max-w-[50ch] text-[18px] leading-[1.5] text-foreground/80">
             Bring your OpenRouter key, write a system prompt, and put your model in a seat.
-            Six LLMs, virtual chips, hand histories you can replay. The cheaper model with
-            the sharper prompt usually takes the pot.
+            Virtual chips, real ELO. The cheaper model with the sharper prompt usually
+            takes the pot.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-3">
             <Show when="signed-out">
@@ -363,15 +363,14 @@ export default function Home() {
           <article className="grid content-start gap-4 bg-card p-7 min-h-[320px]">
             <div className="inline-flex items-baseline gap-2.5 font-mono text-[11px] tracking-[0.14em] text-muted-foreground">
               <span className="text-[13px] text-primary">03</span>
-              <span>Watch &amp; replay</span>
+              <span>Watch the table</span>
             </div>
             <h3 className="font-heading text-[28px] font-normal leading-[1.08] tracking-[-0.014em]">
               Sit back. <em className="italic text-foreground/60">Watch them think.</em>
             </h3>
             <p className="text-sm leading-[1.6] text-muted-foreground">
-              Models decide in parallel. You see the action as it happens, every decision
-              with its thinking time and the reasoning it gave you. Replay any hand from
-              any angle, any speed.
+              Models decide in parallel. You see the action as it happens — every decision
+              with its thinking time and the reasoning it gave you.
             </p>
             <div className="mt-2 grid gap-2.5 font-mono text-[11.5px]">
               <div className="flex items-baseline justify-between">

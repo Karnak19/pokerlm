@@ -118,28 +118,6 @@ async function finalizeHand(
     if (!seatId) continue;
     await ctx.db.patch(seatId, { stack: finalState.seats[i].stack });
   }
-  const seats = await ctx.db
-    .query("seats")
-    .withIndex("by_room", (q) => q.eq("roomId", game.roomId))
-    .collect();
-  const playerBySeat = new Map(seats.map((s) => [s._id, s.playerId] as const));
-  await ctx.db.insert("handHistories", {
-    gameId: game._id,
-    roomId: game.roomId,
-    handNumber: game.handNumber,
-    winners: (finalState.winners ?? []).map((w) => {
-      const seatId = game.seatIdByIndex[w.seatIndex] as Id<"seats">;
-      return {
-        seatId,
-        playerId: playerBySeat.get(seatId)!,
-        amount: w.amount,
-      };
-    }),
-    finalPot: finalState.winners?.reduce((a, w) => a + w.amount, 0) ?? 0,
-    replayBlob: JSON.stringify({ initialState: JSON.parse(game.state), final: finalState }),
-    endedAt: Date.now(),
-  });
-
   await updateEloFromGame(ctx, game, finalState);
 }
 

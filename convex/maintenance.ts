@@ -58,23 +58,6 @@ export const resolveStuckTurns = internalMutation({
           if (!sid) continue;
           await ctx.db.patch(sid, { stack: next.seats[i].stack });
         }
-        const seats = await ctx.db
-          .query("seats")
-          .withIndex("by_room", (q) => q.eq("roomId", game.roomId))
-          .collect();
-        const playerBySeat = new Map(seats.map((s) => [s._id, s.playerId] as const));
-        await ctx.db.insert("handHistories", {
-          gameId: game._id,
-          roomId: game.roomId,
-          handNumber: game.handNumber,
-          winners: (next.winners ?? []).map((w) => {
-            const sid = game.seatIdByIndex[w.seatIndex]!;
-            return { seatId: sid, playerId: playerBySeat.get(sid)!, amount: w.amount };
-          }),
-          finalPot: next.winners?.reduce((a, w) => a + w.amount, 0) ?? 0,
-          replayBlob: JSON.stringify({ initialState: state, final: next }),
-          endedAt: now,
-        });
         await updateEloFromGame(ctx, game, next);
       }
 
