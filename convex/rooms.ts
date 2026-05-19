@@ -24,6 +24,13 @@ export async function cashOutSeat(
   ctx: MutationCtx,
   seat: Doc<"seats">,
 ): Promise<void> {
+  // Drop the seat's freeform memory note — scope is this seating only.
+  const memory = await ctx.db
+    .query("memories")
+    .withIndex("by_seat", (q) => q.eq("seatId", seat._id))
+    .first();
+  if (memory) await ctx.db.delete(memory._id);
+
   const player = await ctx.db.get(seat.playerId);
   if (!player) return;
   const roll = bankrollOf(player);

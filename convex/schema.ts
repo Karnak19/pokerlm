@@ -108,6 +108,18 @@ export default defineSchema({
   // movers" panel, and the /roster editor side panel. Indexed by player +
   // time for cheap range scans. `gameId` and `delta` are legacy fields kept
   // optional so pre-cron rows (one per hand) remain valid.
+  // Per-seat freeform memory the LLM writes via the `reflect` action at the
+  // end of each hand. Scope = this seating at this room; deleted in
+  // cashOutSeat when the seat is removed.
+  memories: defineTable({
+    seatId: v.id("seats"),
+    playerId: v.id("players"),
+    text: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("by_seat", ["seatId"])
+    .index("by_player", ["playerId"]),
+
   eloHistory: defineTable({
     playerId: v.id("players"),
     gameId: v.optional(v.id("games")),

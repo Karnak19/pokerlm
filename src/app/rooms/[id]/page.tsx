@@ -181,6 +181,7 @@ export default function RoomPage() {
   const leaveAfterHand = useMutation(api.rooms.leaveAfterHand);
   const start = useMutation(api.rooms.start);
   const decide = useAction(api.openrouter.decide);
+  const reflect = useAction(api.openrouter.reflect);
 
   const [selectedPlayer, setSelectedPlayer] = useState<Id<"players"> | "">("");
   const [sitError, setSitError] = useState<string | null>(null);
@@ -289,6 +290,25 @@ export default function RoomPage() {
         setTimeout(() => { if (deciding.current === tag) deciding.current = null; }, 1000);
       });
   }, [apiKey, game, me, toActSeat, toActSeatIndex, decide]);
+
+  // When a hand completes, fire `reflect` once per owned seat in parallel.
+  // Dedupe by gameId so the persistent "complete" status doesn't retrigger.
+  const reflectedGameId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!apiKey || !game || game.status !== "complete" || !me || !room) return;
+    const tag = String(game.gameId);
+    if (reflectedGameId.current === tag) return;
+    reflectedGameId.current = tag;
+    const mine = room.seats.filter((s) => s.userId === me._id);
+    if (mine.length === 0) return;
+    void Promise.all(
+      mine.map((s) =>
+        reflect({ gameId: game.gameId, playerId: s.playerId, apiKey }),
+      ),
+    ).catch((e) => {
+      console.error("reflect failed", e);
+    });
+  }, [apiKey, game, me, room, reflect]);
 
   if (room === undefined) {
     return (

@@ -7,8 +7,10 @@ import type { Id, Doc } from "./_generated/dataModel";
 import { updateEloFromGame } from "./leaderboard";
 import { cashOutSeat } from "./rooms";
 
-// Pause between hands so players can see the showdown before chips reset.
-const AUTO_DEAL_DELAY_MS = 3000;
+// Pause between hands so players can see the showdown AND so the per-player
+// `openrouter.reflect` calls fired by watcher browsers have a window to run
+// before the next deal. If a reflect is still running at +15s, deal anyway.
+const AUTO_DEAL_DELAY_MS = 15000;
 
 const ActionValidator = v.union(
   v.object({ kind: v.literal("fold") }),

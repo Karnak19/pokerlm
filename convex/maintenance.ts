@@ -3,7 +3,8 @@ import { applyAction, legalActions, type GameState } from "../src/engine/state";
 import { updateEloFromGame } from "./leaderboard";
 import { internal } from "./_generated/api";
 
-const AUTO_DEAL_DELAY_MS = 3000;
+// Matches games.ts — wait long enough for browser-side reflect calls to land.
+const AUTO_DEAL_DELAY_MS = 15000;
 
 const STUCK_AFTER_MS = 60_000;             // 1 min
 const EMPTY_ROOM_AFTER_MS = 60 * 60 * 1000;          // 1h — waiting room with zero seats
