@@ -1,9 +1,13 @@
-import { mutation, query, type MutationCtx } from "./_generated/server";
+import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { requireUser } from "./users";
 import { applyAction, legalActions, startHand, type Action, type GameState } from "../src/engine/state";
+import { internal } from "./_generated/api";
 import type { Id, Doc } from "./_generated/dataModel";
 import { updateEloFromGame } from "./leaderboard";
+
+// Pause between hands so players can see the showdown before chips reset.
+const AUTO_DEAL_DELAY_MS = 3000;
 
 const ActionValidator = v.union(
   v.object({ kind: v.literal("fold") }),
@@ -101,6 +105,9 @@ export const submitAction = mutation({
 
     if (isComplete) {
       await finalizeHand(ctx, game, nextState);
+      await ctx.scheduler.runAfter(AUTO_DEAL_DELAY_MS, internal.games.autoDealNext, {
+        roomId: game.roomId,
+      });
     }
 
     await ctx.db.patch(game.roomId, { lastActivityAt: now });
@@ -121,6 +128,79 @@ async function finalizeHand(
   await updateEloFromGame(ctx, game, finalState);
 }
 
+// Deals the next hand for a room. Safe to call when the previous game is
+// already complete and ≥2 seats still have chips; otherwise no-ops.
+async function dealHand(ctx: MutationCtx, roomId: Id<"rooms">): Promise<Id<"games"> | null> {
+  const room = await ctx.db.get(roomId);
+  if (!room) return null;
+  if (room.status !== "playing") return null;
+  const prev = await ctx.db
+    .query("games")
+    .withIndex("by_room", (q) => q.eq("roomId", roomId))
+    .order("desc")
+    .first();
+  if (!prev || prev.status !== "complete") return null;
+
+  const seats = await ctx.db
+    .query("seats")
+    .withIndex("by_room", (q) => q.eq("roomId", roomId))
+    .collect();
+  seats.sort((a, b) => a.seatIndex - b.seatIndex);
+  const withChips = seats.filter((s) => s.stack > 0);
+  if (withChips.length < 2) {
+    // Table can't run another hand — reopen so anyone can sit again.
+    await ctx.db.patch(roomId, { status: "waiting" });
+    return null;
+  }
+
+  const seatCount = room.maxSeats;
+  const stacks: number[] = Array(seatCount).fill(0);
+  const seatIdByIndex: Array<Id<"seats"> | null> = Array(seatCount).fill(null);
+  for (const s of seats) {
+    stacks[s.seatIndex] = s.stack;
+    seatIdByIndex[s.seatIndex] = s._id;
+  }
+
+  let nextDealer = prev.dealerSeatIndex;
+  for (let i = 1; i <= seatCount; i++) {
+    const idx = (prev.dealerSeatIndex + i) % seatCount;
+    if (stacks[idx] > 0) { nextDealer = idx; break; }
+  }
+
+  const seed = (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
+  const state = startHand({
+    seatCount,
+    stacks,
+    dealerIndex: nextDealer,
+    smallBlind: room.smallBlind,
+    bigBlind: room.bigBlind,
+    seed,
+  });
+
+  const now = Date.now();
+  await ctx.db.patch(roomId, { lastActivityAt: now });
+  return await ctx.db.insert("games", {
+    roomId,
+    handNumber: prev.handNumber + 1,
+    dealerSeatIndex: nextDealer,
+    status: "in_progress",
+    seatIdByIndex,
+    state: JSON.stringify(state),
+    currentSeatToActIndex: state.toAct ?? undefined,
+    currentSeatToActSince: now,
+    startedAt: now,
+  });
+}
+
+// Internal mutation invoked by the scheduler after a hand completes.
+// Falls through silently if the room was paused/left/busted in the meantime.
+export const autoDealNext = internalMutation({
+  args: { roomId: v.id("rooms") },
+  handler: async (ctx, { roomId }) => {
+    await dealHand(ctx, roomId);
+  },
+});
+
 export const legalForCurrent = query({
   args: { gameId: v.id("games") },
   handler: async (ctx, { gameId }) => {
@@ -132,65 +212,15 @@ export const legalForCurrent = query({
   },
 });
 
+// Public mutation kept as a manual fallback in case the auto-deal scheduler
+// drops a hand (e.g. transient Convex outage). UI does not call this in the
+// normal loop — auto-deal in `submitAction` handles it.
 export const startNextHand = mutation({
   args: { roomId: v.id("rooms") },
   handler: async (ctx, { roomId }) => {
-    const user = await requireUser(ctx);
-    const room = await ctx.db.get(roomId);
-    if (!room) throw new Error("Room not found");
-    if (room.createdBy !== user._id) throw new Error("Only the room creator can deal");
-    const prev = await ctx.db
-      .query("games")
-      .withIndex("by_room", (q) => q.eq("roomId", roomId))
-      .order("desc")
-      .first();
-    if (!prev) throw new Error("No prior hand");
-    if (prev.status !== "complete") throw new Error("Previous hand not done");
-
-    const seats = await ctx.db
-      .query("seats")
-      .withIndex("by_room", (q) => q.eq("roomId", roomId))
-      .collect();
-    seats.sort((a, b) => a.seatIndex - b.seatIndex);
-    const withChips = seats.filter((s) => s.stack > 0);
-    if (withChips.length < 2) throw new Error("Not enough players with chips");
-
-    const seatCount = room.maxSeats;
-    const stacks: number[] = Array(seatCount).fill(0);
-    const seatIdByIndex: Array<Id<"seats"> | null> = Array(seatCount).fill(null);
-    for (const s of seats) {
-      stacks[s.seatIndex] = s.stack;
-      seatIdByIndex[s.seatIndex] = s._id;
-    }
-
-    // Rotate dealer to next seat with chips
-    let nextDealer = prev.dealerSeatIndex;
-    for (let i = 1; i <= seatCount; i++) {
-      const idx = (prev.dealerSeatIndex + i) % seatCount;
-      if (stacks[idx] > 0) { nextDealer = idx; break; }
-    }
-
-    const seed = (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
-    const state = startHand({
-      seatCount,
-      stacks,
-      dealerIndex: nextDealer,
-      smallBlind: room.smallBlind,
-      bigBlind: room.bigBlind,
-      seed,
-    });
-
-    const now = Date.now();
-    return await ctx.db.insert("games", {
-      roomId,
-      handNumber: prev.handNumber + 1,
-      dealerSeatIndex: nextDealer,
-      status: "in_progress",
-      seatIdByIndex,
-      state: JSON.stringify(state),
-      currentSeatToActIndex: state.toAct ?? undefined,
-      currentSeatToActSince: now,
-      startedAt: now,
-    });
+    await requireUser(ctx);
+    const id = await dealHand(ctx, roomId);
+    if (!id) throw new Error("Cannot deal: previous hand not complete, or not enough chips");
+    return id;
   },
 });

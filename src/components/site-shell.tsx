@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Show, SignInButton, SignOutButton } from "@clerk/nextjs";
@@ -32,19 +32,26 @@ function maskKey(k: string): string {
   return `•••• ${k.slice(-4)}`;
 }
 
-function readStoredKey(): string {
-  if (typeof window === "undefined") return "";
-  try {
-    return sessionStorage.getItem(OR_STORAGE_KEY) ?? "";
-  } catch {
-    return "";
-  }
-}
-
 function NavKey() {
   const [reveal, setReveal] = useState(false);
-  const [key, setKey] = useState<string>(readStoredKey);
-  const [draft, setDraft] = useState<string>(readStoredKey);
+  // Server render = empty; we rehydrate from sessionStorage after mount to
+  // avoid an SSR/CSR mismatch (sessionStorage is client-only).
+  const [key, setKey] = useState<string>("");
+  const [draft, setDraft] = useState<string>("");
+  const [mounted, setMounted] = useState(false);
+
+  /* eslint-disable react-hooks/set-state-in-effect -- mount-time hydration from sessionStorage (client-only) */
+  useEffect(() => {
+    setMounted(true);
+    try {
+      const stored = sessionStorage.getItem(OR_STORAGE_KEY) ?? "";
+      setKey(stored);
+      setDraft(stored);
+    } catch {
+      /* sessionStorage unavailable */
+    }
+  }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   function persist(next: string) {
     const trimmed = next.trim();
@@ -56,7 +63,9 @@ function NavKey() {
     } catch {}
   }
 
-  const empty = !key;
+  // Until mount, render a neutral chip so SSR and CSR match. After the
+  // sessionStorage read in useEffect we know whether the key is empty.
+  const empty = mounted && !key;
 
   return (
     <Popover>
@@ -82,7 +91,7 @@ function NavKey() {
           <span className="hidden text-[10px] uppercase tracking-wide text-muted-foreground sm:inline">
             KEY
           </span>
-          <span>{maskKey(key)}</span>
+          <span>{mounted ? maskKey(key) : "key"}</span>
           <ChevronDown className="size-2.5 text-muted-foreground transition-transform group-aria-expanded:rotate-180" />
         </button>
       </PopoverTrigger>

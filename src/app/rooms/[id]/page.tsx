@@ -15,8 +15,6 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
 const SUIT_GLYPH: Record<string, string> = { h: "♥", d: "♦", s: "♠", c: "♣" };
@@ -78,23 +76,21 @@ function CardBack({ size = "lg" }: { size?: "sm" | "lg" }) {
   return <div className={cn("pl-card-back rounded-[6px]", CARD_SIZE[size])} />;
 }
 
-// 6-seat oval positions. Order chosen so seat index 3 (after rotate) sits at the
-// bottom when you have a seat, otherwise positions are filled clockwise from top.
-// Inline-style coordinates because absolute placement around the felt oval is
-// inherently position-specific — Tailwind arbitrary values would be the same
-// numbers in less-readable form.
+// 6-seat oval positions, ordered clockwise from the top. Seat index N always
+// renders at SEAT_STYLE[N] regardless of viewer, so the layout is identical
+// for every device watching the same hand.
 const SEAT_STYLE: CSSProperties[] = [
-  // pos-1 — top
+  // 0 — top
   { top: -22, left: "50%", transform: "translateX(-50%)" },
-  // pos-2 — top right
+  // 1 — top right
   { top: "28%", right: -30, transform: "translateY(-50%)" },
-  // pos-3 — bottom right
+  // 2 — bottom right
   { bottom: "28%", right: -30, transform: "translateY(50%)" },
-  // pos-4 — bottom (you)
+  // 3 — bottom
   { bottom: -22, left: "50%", transform: "translateX(-50%)" },
-  // pos-5 — bottom left
+  // 4 — bottom left
   { bottom: "28%", left: -30, transform: "translateY(50%)" },
-  // pos-6 — top left
+  // 5 — top left
   { top: "28%", left: -30, transform: "translateY(-50%)" },
 ];
 
@@ -137,25 +133,15 @@ export default function RoomPage() {
   const sit = useMutation(api.rooms.sit);
   const leave = useMutation(api.rooms.leave);
   const start = useMutation(api.rooms.start);
-  const submit = useMutation(api.games.submitAction);
-  const dealNext = useMutation(api.games.startNextHand);
   const decide = useAction(api.openrouter.decide);
 
   const [selectedPlayer, setSelectedPlayer] = useState<Id<"players"> | "">("");
-  const [raiseAmount, setRaiseAmount] = useState<string>("");
-  const [apiKey, setApiKey] = useState<string>(() => {
+  // Read once at mount; the OpenRouter-key chip in the nav owns writes to sessionStorage.
+  const apiKey = useMemo(() => {
     if (typeof window === "undefined") return "";
     return sessionStorage.getItem("pokerlm.openrouter.key") ?? "";
-  });
-  const [autoPlay, setAutoPlay] = useState(true);
+  }, []);
   const deciding = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      if (apiKey) sessionStorage.setItem("pokerlm.openrouter.key", apiKey);
-      else sessionStorage.removeItem("pokerlm.openrouter.key");
-    }
-  }, [apiKey]);
 
   const mySeat = me && room ? room.seats.find((s) => s.userId === me._id) : undefined;
   const isCreator = !!me && !!room && me._id === room.createdBy;
@@ -165,10 +151,10 @@ export default function RoomPage() {
   const toActSeat = toActSeatIndex !== null && toActSeatIndex !== undefined && room
     ? room.seats.find((s) => s.seatIndex === toActSeatIndex)
     : undefined;
-  const isMyTurn = !!(toActSeat && mySeat && toActSeat._id === mySeat._id);
 
+  // Every seat is AI-driven; whichever browser owns the to-act seat fires the LLM.
   useEffect(() => {
-    if (!autoPlay || !apiKey || !game || game.status !== "in_progress" || !me) return;
+    if (!apiKey || !game || game.status !== "in_progress" || !me) return;
     if (toActSeat?.userId !== me._id) return;
     const tag = `${game.gameId}:${toActSeatIndex}:${game.recentActions.length}`;
     if (deciding.current === tag) return;
@@ -178,19 +164,7 @@ export default function RoomPage() {
       .finally(() => {
         setTimeout(() => { if (deciding.current === tag) deciding.current = null; }, 1000);
       });
-  }, [autoPlay, apiKey, game, me, toActSeat, toActSeatIndex, decide]);
-
-  // Compute call-amount + min raise for the action bar
-  const callAmount = useMemo(() => {
-    if (!state || toActSeatIndex === null || toActSeatIndex === undefined) return 0;
-    const mine = state.seats[toActSeatIndex];
-    if (!mine) return 0;
-    return Math.max(0, (state.currentBet ?? 0) - (mine.streetBet ?? 0));
-  }, [state, toActSeatIndex]);
-  const myStack = useMemo(() => {
-    if (!state || toActSeatIndex === null || toActSeatIndex === undefined) return 0;
-    return state.seats[toActSeatIndex]?.stack ?? 0;
-  }, [state, toActSeatIndex]);
+  }, [apiKey, game, me, toActSeat, toActSeatIndex, decide]);
 
   if (room === undefined) {
     return (
@@ -211,19 +185,6 @@ export default function RoomPage() {
     );
   }
 
-  async function act(kind: "fold" | "check" | "call" | "all_in") {
-    if (!game) return;
-    await submit({ gameId: game.gameId, action: { kind } });
-  }
-  async function actRaise() {
-    if (!game || !state) return;
-    const amt = parseInt(raiseAmount, 10);
-    if (!Number.isFinite(amt)) return;
-    const kind = (state.currentBet ?? 0) === 0 ? "bet" : "raise";
-    await submit({ gameId: game.gameId, action: { kind, amount: amt } as never });
-    setRaiseAmount("");
-  }
-
   const community: string[] = state?.community ?? [];
   const pot = state?.pot ?? 0;
   const street = state?.street ?? "waiting";
@@ -234,15 +195,11 @@ export default function RoomPage() {
   const roomCode = room._id.slice(-4);
   const blinds = `${room.smallBlind} / ${room.bigBlind}`;
 
-  // Build seat slots — map seatIndex 0..maxSeats-1 onto SEAT_STYLE.
-  // Rotate so that "you" sits at position 3 (bottom) if seated.
-  const maxSeats = room.maxSeats;
-  const youSeatIndex = mySeat?.seatIndex;
-  const rotate = (i: number) => {
-    if (youSeatIndex === undefined) return i;
-    const target = 3;
-    return ((i - youSeatIndex + target) + maxSeats) % maxSeats;
-  };
+  // Seat positions are fixed: seat index 0 → position 0, 1 → 1, etc.
+  // Same layout for everyone. (Previously the viewer's own seat was rotated
+  // to the bottom — that's nice for solo play but inconsistent across
+  // devices and confusing when multiple people watch the same hand.)
+  const rotate = (i: number) => i;
 
   return (
     <SiteShell footerNote={`${room.name} · hand ${handNumber ? `#${handNumber}` : "—"} · ${street}`}>
@@ -292,14 +249,26 @@ export default function RoomPage() {
             </div>
           </div>
           <div className="flex items-center gap-2.5">
-            {room.status === "waiting" && mySeat && (
-              <Button variant="outline" onClick={() => leave({ roomId })}>Leave seat</Button>
-            )}
             {room.status === "waiting" && isCreator && room.seats.length >= 2 && (
               <Button onClick={() => start({ roomId })}>Start game</Button>
             )}
-            {game?.status === "complete" && isCreator && (
-              <Button onClick={() => dealNext({ roomId })}>Deal next hand</Button>
+            {game?.status === "complete" && (
+              <span className="inline-flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
+                <span className="size-1.5 rounded-full bg-primary motion-safe:animate-pulse" />
+                dealing next hand…
+              </span>
+            )}
+            {mySeat && (
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  const live = room.status === "playing" && game?.status === "in_progress";
+                  if (live && !confirm("Leaving mid-hand will fold your seat. Continue?")) return;
+                  void leave({ roomId });
+                }}
+              >
+                Leave table
+              </Button>
             )}
           </div>
         </header>
@@ -372,8 +341,6 @@ export default function RoomPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <span>Auto-play {autoPlay ? "ON" : "OFF"}</span>
-                  <span className="text-white/25">·</span>
                   <span>{room.status}</span>
                 </div>
               </div>
@@ -395,7 +362,7 @@ export default function RoomPage() {
                   PokerLM · {room.name}
                 </span>
 
-                {Array.from({ length: maxSeats }).map((_, idx) => {
+                {Array.from({ length: room.maxSeats }).map((_, idx) => {
                   const seat = room.seats.find((s) => s.seatIndex === idx);
                   const sState = state?.seats[idx];
                   const pos = rotate(idx);
@@ -688,125 +655,26 @@ export default function RoomPage() {
             </div>
           )}
 
-          {/* Action bar */}
-          {game?.status === "in_progress" && (
-            <Card
-              className={cn(
-                "mt-5 grid grid-cols-1 items-center gap-6 border-chip/35 px-5 py-4 xl:grid-cols-[auto_1fr_auto]",
-                !isMyTurn && "pointer-events-none opacity-55",
+          {/* Thinking indicator — quiet badge while the current seat's bot decides */}
+          {game?.status === "in_progress" && toActSeat && (
+            <div className="mt-5 flex items-center gap-3 rounded-[14px] border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
+              <span className="size-1.5 rounded-full bg-primary motion-safe:animate-pulse" />
+              <span>
+                <em className="font-heading italic text-foreground/80">
+                  {toActSeat.player?.name ?? "Seat " + toActSeatIndex}
+                </em>{" "}
+                is thinking
+              </span>
+              <span className="font-mono text-[11px] tabular-nums text-muted-foreground/70">
+                · {toActSeat.player?.model ?? "—"}
+              </span>
+              {!apiKey && (
+                <span className="ml-auto font-mono text-[11px] text-destructive">
+                  paste your OpenRouter key in the nav to let the bots play
+                </span>
               )}
-            >
-              <div className="grid gap-1">
-                <div className="font-heading text-[22px] leading-none tracking-tight">
-                  {isMyTurn ? (
-                    <>Your <em className="italic text-chip">turn</em>.</>
-                  ) : (
-                    <>{toActSeat?.player?.name ?? "Waiting"} <em className="italic text-chip">thinking</em></>
-                  )}
-                </div>
-                <div className="font-mono text-[11px] text-muted-foreground">
-                  pot is ${pot} · {callAmount > 0 ? `call $${callAmount}` : "check available"}
-                </div>
-              </div>
-              <div className="grid grid-cols-1 items-center gap-3.5 lg:grid-cols-[auto_1fr_auto]">
-                <div className="flex flex-wrap gap-1.5">
-                  {[
-                    { label: "1/3 pot", v: Math.round(pot / 3) },
-                    { label: "1/2 pot", v: Math.round(pot / 2) },
-                    { label: "2/3 pot", v: Math.round((pot * 2) / 3) },
-                    { label: "Pot", v: pot },
-                    { label: "All-in", v: myStack },
-                  ].map((p) => (
-                    <Button
-                      key={p.label}
-                      type="button"
-                      variant="outline"
-                      size="xs"
-                      className="font-mono"
-                      onClick={() => setRaiseAmount(String(p.v))}
-                    >
-                      {p.label}
-                    </Button>
-                  ))}
-                </div>
-                <div className="grid gap-1">
-                  <input
-                    type="range"
-                    min={Math.max(1, (state?.bigBlind as number) ?? room.bigBlind)}
-                    max={Math.max(1, myStack)}
-                    step={Math.max(1, Math.round(room.bigBlind / 2))}
-                    value={(() => { const n = parseInt(raiseAmount, 10); return Number.isFinite(n) ? n : Math.max(callAmount, room.bigBlind); })()}
-                    onChange={(e) => setRaiseAmount(e.target.value)}
-                    className="h-1.5 w-full appearance-none rounded-full bg-input/40 accent-primary outline-none"
-                  />
-                  <div className="flex justify-between font-mono text-[10px] text-muted-foreground">
-                    <span>min · ${room.bigBlind}</span>
-                    <span>pot · ${pot}</span>
-                    <span>all-in · ${myStack}</span>
-                  </div>
-                </div>
-                <Input
-                  type="text"
-                  inputMode="numeric"
-                  value={raiseAmount}
-                  onChange={(e) => setRaiseAmount(e.target.value.replace(/[^0-9]/g, ""))}
-                  placeholder="0"
-                  className="w-[110px] text-right font-mono tabular-nums text-base"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button variant="destructive" size="lg" onClick={() => act("fold")} disabled={!isMyTurn}>
-                  Fold
-                </Button>
-                {callAmount === 0 ? (
-                  <Button variant="outline" size="lg" onClick={() => act("check")} disabled={!isMyTurn}>
-                    Check
-                  </Button>
-                ) : (
-                  <Button variant="outline" size="lg" onClick={() => act("call")} disabled={!isMyTurn}>
-                    Call ${callAmount}
-                  </Button>
-                )}
-                <Button size="lg" onClick={actRaise} disabled={!isMyTurn || !raiseAmount}>
-                  {(state?.currentBet ?? 0) === 0 ? "Bet" : "Raise to"} ${raiseAmount || "—"}
-                </Button>
-              </div>
-            </Card>
-          )}
-
-          {/* Auto-play key row */}
-          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-[14px] border border-dashed border-border px-4 py-3 text-xs text-muted-foreground">
-            <Label htmlFor="or-key" className="text-xs font-normal text-muted-foreground">
-              OpenRouter key:
-            </Label>
-            <Input
-              id="or-key"
-              type="password"
-              placeholder="sk-or-…"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              className="w-[240px] font-mono text-xs"
-            />
-            <div className="inline-flex items-center gap-2">
-              <Switch
-                id="auto-play"
-                checked={autoPlay}
-                onCheckedChange={(v) => setAutoPlay(!!v)}
-              />
-              <Label htmlFor="auto-play" className="text-xs font-normal text-muted-foreground">
-                Auto-play my seat
-              </Label>
             </div>
-            <a
-              href="https://openrouter.ai/settings/keys"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary underline-offset-[3px] hover:underline"
-            >
-              Create one ↗
-            </a>
-            <span>Held in sessionStorage only — never sent to our DB.</span>
-          </div>
+          )}
 
           {/* Hand history + session stats */}
           <div className="mt-5 grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">

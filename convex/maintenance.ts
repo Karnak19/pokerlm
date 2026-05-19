@@ -1,9 +1,13 @@
 import { internalMutation } from "./_generated/server";
 import { applyAction, legalActions, type GameState } from "../src/engine/state";
 import { updateEloFromGame } from "./leaderboard";
+import { internal } from "./_generated/api";
 
-const STUCK_AFTER_MS = 60_000;       // 1 min
-const IDLE_ROOM_AFTER_MS = 24 * 3600 * 1000; // 24h
+const AUTO_DEAL_DELAY_MS = 3000;
+
+const STUCK_AFTER_MS = 60_000;             // 1 min
+const EMPTY_ROOM_AFTER_MS = 60 * 60 * 1000;          // 1h — waiting room with zero seats
+const OCCUPIED_IDLE_ROOM_AFTER_MS = 24 * 3600 * 1000; // 24h — waiting room with seats but never started
 
 export const resolveStuckTurns = internalMutation({
   args: {},
@@ -59,6 +63,9 @@ export const resolveStuckTurns = internalMutation({
           await ctx.db.patch(sid, { stack: next.seats[i].stack });
         }
         await updateEloFromGame(ctx, game, next);
+        await ctx.scheduler.runAfter(AUTO_DEAL_DELAY_MS, internal.games.autoDealNext, {
+          roomId: game.roomId,
+        });
       }
 
       await ctx.db.patch(game.roomId, { lastActivityAt: now });
@@ -75,7 +82,13 @@ export const archiveIdleRooms = internalMutation({
       .withIndex("by_status", (q) => q.eq("status", "waiting"))
       .collect();
     for (const r of rooms) {
-      if (now - r.lastActivityAt > IDLE_ROOM_AFTER_MS) {
+      const idleFor = now - r.lastActivityAt;
+      const seats = await ctx.db
+        .query("seats")
+        .withIndex("by_room", (q) => q.eq("roomId", r._id))
+        .collect();
+      const threshold = seats.length === 0 ? EMPTY_ROOM_AFTER_MS : OCCUPIED_IDLE_ROOM_AFTER_MS;
+      if (idleFor > threshold) {
         await ctx.db.patch(r._id, { status: "finished" });
       }
     }

@@ -1,7 +1,8 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireUser } from "./users";
-import { startHand } from "../src/engine/state";
+import { applyAction, startHand, type GameState } from "../src/engine/state";
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 
 export const listOpen = query({
@@ -116,14 +117,74 @@ export const leave = mutation({
     const user = await requireUser(ctx);
     const room = await ctx.db.get(roomId);
     if (!room) throw new Error("Room not found");
-    if (room.status === "playing") throw new Error("Cannot leave a room in play");
     const seat = await ctx.db
       .query("seats")
       .withIndex("by_room_user", (q) => q.eq("roomId", roomId).eq("userId", user._id))
       .first();
     if (!seat) return;
+
+    // If a hand is live and the leaver is still in it, force-fold so the
+    // engine advances cleanly before we drop the seat.
+    if (room.status === "playing") {
+      const game = await ctx.db
+        .query("games")
+        .withIndex("by_room", (q) => q.eq("roomId", roomId))
+        .order("desc")
+        .first();
+      if (game && game.status === "in_progress") {
+        const state = JSON.parse(game.state) as GameState;
+        const engineSeat = state.seats[seat.seatIndex];
+        if (engineSeat && engineSeat.status !== "folded" && engineSeat.status !== "sitting_out") {
+          let next = state;
+          // Only the to-act seat can submit a normal fold; for everyone
+          // else just mark folded and let the next applyAction wake the
+          // remaining live seats.
+          if (state.toAct === seat.seatIndex) {
+            next = applyAction(state, { kind: "fold" });
+          } else {
+            next = { ...state, seats: state.seats.map((s, i) => i === seat.seatIndex ? { ...s, status: "folded" } : s) };
+          }
+          const complete = next.street === "showdown" || !!next.winners;
+          const now = Date.now();
+          await ctx.db.insert("actions", {
+            gameId: game._id,
+            seatId: seat._id,
+            seatIndex: seat.seatIndex,
+            street: state.street,
+            kind: "fold",
+            amount: 0,
+            at: now,
+          });
+          await ctx.db.patch(game._id, {
+            state: JSON.stringify(next),
+            currentSeatToActIndex: next.toAct ?? undefined,
+            currentSeatToActSince: next.toAct !== null ? now : undefined,
+            status: complete ? "complete" : "in_progress",
+            endedAt: complete ? now : undefined,
+          });
+          if (complete) {
+            for (let i = 0; i < next.seats.length; i++) {
+              const sid = game.seatIdByIndex[i];
+              if (!sid) continue;
+              await ctx.db.patch(sid, { stack: next.seats[i].stack });
+            }
+            await ctx.scheduler.runAfter(3000, internal.games.autoDealNext, { roomId });
+          }
+        }
+      }
+    }
+
     await ctx.db.delete(seat._id);
-    await ctx.db.patch(roomId, { lastActivityAt: Date.now() });
+    const remaining = await ctx.db
+      .query("seats")
+      .withIndex("by_room", (q) => q.eq("roomId", roomId))
+      .collect();
+    const patch: { lastActivityAt: number; status?: "waiting" } = { lastActivityAt: Date.now() };
+    if (remaining.length < 2 && room.status === "playing") {
+      // Not enough players left to run a hand — reopen the room so others can sit.
+      patch.status = "waiting";
+    }
+    await ctx.db.patch(roomId, patch);
   },
 });
 
