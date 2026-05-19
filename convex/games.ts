@@ -67,8 +67,9 @@ export const submitAction = mutation({
     action: ActionValidator,
     thinkingMs: v.optional(v.number()),
     rawLLM: v.optional(v.string()),
+    reasoning: v.optional(v.string()),
   },
-  handler: async (ctx, { gameId, action, thinkingMs, rawLLM }) => {
+  handler: async (ctx, { gameId, action, thinkingMs, rawLLM, reasoning }) => {
     const user = await requireUser(ctx);
     const game = await ctx.db.get(gameId);
     if (!game) throw new Error("Game not found");
@@ -97,6 +98,7 @@ export const submitAction = mutation({
       amount: "amount" in action ? action.amount : 0,
       thinkingMs,
       rawLLM,
+      reasoning,
       at: now,
     });
 

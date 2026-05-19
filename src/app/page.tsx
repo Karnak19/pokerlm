@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { cacheLife } from "next/cache";
 import { Show, SignInButton } from "@clerk/nextjs";
 import { fetchQuery } from "convex/nextjs";
@@ -9,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { PlayerAvatar } from "@/components/player-avatar";
 
 // Hero stats + mini leaderboard get cached for a few minutes. Tradeoff: ELO
 // changes don't appear in real time, but the HTML ships with data already
@@ -153,26 +155,37 @@ export default async function Home() {
           takes the pot.
         </p>
         <div className="mt-9 flex flex-wrap items-center gap-3">
-          <Show when="signed-out">
-            <SignInButton mode="modal">
-              <Button size="lg">
+          <Suspense
+            fallback={
+              <Button size="lg" disabled>
                 Sit at a table
                 <span className="ml-1 rounded bg-black/25 px-1.5 py-px font-mono text-[11px] text-primary-foreground/80">
                   ↵
                 </span>
               </Button>
-            </SignInButton>
-          </Show>
-          <Show when="signed-in">
-            <Button size="lg" asChild>
-              <Link href="/rooms">
-                Sit at a table
-                <span className="ml-1 rounded bg-black/25 px-1.5 py-px font-mono text-[11px] text-primary-foreground/80">
-                  ↵
-                </span>
-              </Link>
-            </Button>
-          </Show>
+            }
+          >
+            <Show when="signed-out">
+              <SignInButton mode="modal">
+                <Button size="lg">
+                  Sit at a table
+                  <span className="ml-1 rounded bg-black/25 px-1.5 py-px font-mono text-[11px] text-primary-foreground/80">
+                    ↵
+                  </span>
+                </Button>
+              </SignInButton>
+            </Show>
+            <Show when="signed-in">
+              <Button size="lg" asChild>
+                <Link href="/rooms">
+                  Sit at a table
+                  <span className="ml-1 rounded bg-black/25 px-1.5 py-px font-mono text-[11px] text-primary-foreground/80">
+                    ↵
+                  </span>
+                </Link>
+              </Button>
+            </Show>
+          </Suspense>
           <Button size="lg" variant="outline" asChild>
             <Link href="/how-it-works">See how it works</Link>
           </Button>
@@ -323,7 +336,8 @@ export default async function Home() {
             </h3>
             <p className="text-sm leading-[1.6] text-muted-foreground">
               Models decide in parallel. You see the action as it happens — every decision
-              with its thinking time and the reasoning it gave you.
+              with its thinking time and the reasoning it gave you. After each hand, your
+              bots take their own notes on the table and use them next time around.
             </p>
             <div className="mt-2 grid gap-2.5 font-mono text-[11.5px]">
               <div className="flex items-baseline justify-between">
@@ -555,7 +569,7 @@ export default async function Home() {
                   {String(i + 1).padStart(2, "0")}
                 </span>
                 <div className="grid min-w-0 grid-cols-[36px_1fr] items-center gap-2.5">
-                  <Avatar letter={initial} size={36} />
+                  <PlayerAvatar seed={r.playerId} fallback={initial} size={36} />
                   <div className="grid min-w-0 gap-0.5">
                     <span className="truncate text-sm">{r.player?.name}</span>
                     <span className="truncate font-mono text-[11px] text-muted-foreground">
@@ -598,28 +612,40 @@ export default async function Home() {
             </p>
           </div>
           <div className="grid justify-items-start gap-2.5 lg:justify-items-end">
-            <Show when="signed-out">
-              <SignInButton mode="modal">
-                <Button size="lg" className="h-12 px-5.5 text-base">
+            <Suspense
+              fallback={
+                <Button size="lg" disabled className="h-12 px-5.5 text-base">
                   Sit at a table
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                     <path d="M5 12h14" />
                     <path d="m12 5 7 7-7 7" />
                   </svg>
                 </Button>
-              </SignInButton>
-            </Show>
-            <Show when="signed-in">
-              <Button size="lg" className="h-12 px-5.5 text-base" asChild>
-                <Link href="/rooms">
-                  Sit at a table
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M5 12h14" />
-                    <path d="m12 5 7 7-7 7" />
-                  </svg>
-                </Link>
-              </Button>
-            </Show>
+              }
+            >
+              <Show when="signed-out">
+                <SignInButton mode="modal">
+                  <Button size="lg" className="h-12 px-5.5 text-base">
+                    Sit at a table
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12h14" />
+                      <path d="m12 5 7 7-7 7" />
+                    </svg>
+                  </Button>
+                </SignInButton>
+              </Show>
+              <Show when="signed-in">
+                <Button size="lg" className="h-12 px-5.5 text-base" asChild>
+                  <Link href="/rooms">
+                    Sit at a table
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12h14" />
+                      <path d="m12 5 7 7-7 7" />
+                    </svg>
+                  </Link>
+                </Button>
+              </Show>
+            </Suspense>
             <span className="font-mono text-[11px] text-white/55 lg:text-right">
               free · BYO key · 60s setup
             </span>

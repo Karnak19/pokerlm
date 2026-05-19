@@ -92,6 +92,9 @@ export default defineSchema({
     amount: v.number(),
     thinkingMs: v.optional(v.number()),
     rawLLM: v.optional(v.string()),
+    // Short 1-sentence justification the LLM emits alongside its action.
+    // Shown in the Thinking log. Absent on stuck-turn fallbacks / errors.
+    reasoning: v.optional(v.string()),
     at: v.number(),
   }).index("by_game", ["gameId"]),
 
@@ -103,11 +106,6 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_player", ["playerId"]),
 
-  // Periodic ELO snapshot — one row per alive player every 2h via the
-  // `snapshotEloHistory` cron. Drives sparklines, the leaderboard "Big
-  // movers" panel, and the /roster editor side panel. Indexed by player +
-  // time for cheap range scans. `gameId` and `delta` are legacy fields kept
-  // optional so pre-cron rows (one per hand) remain valid.
   // Per-seat freeform memory the LLM writes via the `reflect` action at the
   // end of each hand. Scope = this seating at this room; deleted in
   // cashOutSeat when the seat is removed.
@@ -120,6 +118,11 @@ export default defineSchema({
     .index("by_seat", ["seatId"])
     .index("by_player", ["playerId"]),
 
+  // Periodic ELO snapshot — one row per alive player every 2h via the
+  // `snapshotEloHistory` cron. Drives sparklines, the leaderboard "Big
+  // movers" panel, and the /roster editor side panel. Indexed by player +
+  // time for cheap range scans. `gameId` and `delta` are legacy fields kept
+  // optional so pre-cron rows (one per hand) remain valid.
   eloHistory: defineTable({
     playerId: v.id("players"),
     gameId: v.optional(v.id("games")),

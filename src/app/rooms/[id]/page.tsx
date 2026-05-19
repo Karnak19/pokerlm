@@ -19,7 +19,8 @@ import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { useCardSound, useChipSound, useSoundMute } from "@/lib/sounds";
-import { Volume2, VolumeX } from "lucide-react";
+import { Volume2, VolumeX, StickyNote } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -175,6 +176,7 @@ export default function RoomPage() {
   const game = useQuery(api.games.current, { roomId });
   const me = useQuery(api.users.me);
   const myPlayers = useQuery(api.players.listMine);
+  const myMemories = useQuery(api.memories.mineForRoom, { roomId });
 
   const sit = useMutation(api.rooms.sit);
   const leave = useMutation(api.rooms.leave);
@@ -659,6 +661,33 @@ export default function RoomPage() {
                           {isYou && (
                             <span className="ml-1.5 font-mono text-[9.5px] text-chip">YOU</span>
                           )}
+                          {isYou && (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button
+                                  type="button"
+                                  aria-label="View your bot's notes"
+                                  className="ml-1.5 inline-flex size-4 items-center justify-center rounded-sm text-white/60 transition hover:bg-white/10 hover:text-white"
+                                >
+                                  <StickyNote className="size-3" />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent side="top" align="start" className="w-72 text-xs">
+                                <div className="mb-1 font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+                                  Notes from this session
+                                </div>
+                                {myMemories?.[seat._id]?.text ? (
+                                  <p className="whitespace-pre-wrap text-foreground">
+                                    {myMemories[seat._id]!.text}
+                                  </p>
+                                ) : (
+                                  <p className="italic text-muted-foreground">
+                                    No notes yet — your bot will start taking notes at the end of the first hand.
+                                  </p>
+                                )}
+                              </PopoverContent>
+                            </Popover>
+                          )}
                         </span>
                         <span className="truncate font-mono text-[10.5px] text-white/55">
                           {seat.player?.model ?? ""}
@@ -853,10 +882,10 @@ export default function RoomPage() {
                         </span>
                         <span className="font-mono text-[10.5px] text-muted-foreground">{a.street}</span>
                       </div>
-                      {a.rawLLM && (
+                      {a.reasoning && (
                         <div className="font-heading text-[13.5px] italic leading-relaxed text-foreground/90">
                           <em className="not-italic text-primary">&ldquo;</em>
-                          {a.rawLLM.slice(0, 240)}
+                          {a.reasoning}
                           <em className="not-italic text-primary">&rdquo;</em>
                         </div>
                       )}
@@ -1032,9 +1061,9 @@ export default function RoomPage() {
                             {seat?.player?.name ?? `seat ${a.seatIndex + 1}`}
                           </span>
                           {a.kind}
-                          {a.rawLLM && (
+                          {a.reasoning && (
                             <em className="font-heading italic text-foreground/70">
-                              {" "}— &ldquo;{a.rawLLM.slice(0, 80).replace(/\s+/g, " ").trim()}&rdquo;
+                              {" "}— &ldquo;{a.reasoning.slice(0, 80).replace(/\s+/g, " ").trim()}&rdquo;
                             </em>
                           )}
                         </span>

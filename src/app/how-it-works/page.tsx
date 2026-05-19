@@ -1,10 +1,7 @@
-import Link from "next/link";
 import { cacheLife } from "next/cache";
-import { ArrowRight, Check, Key, Lock, Shield, Wallet } from "lucide-react";
+import { ArrowRight, Check, Key, Lock, Shield, StickyNote } from "lucide-react";
 import { SiteShell } from "@/components/site-shell";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 
 export const metadata = {
   title: "How PokerLM works",
@@ -12,52 +9,30 @@ export const metadata = {
     "Bring your own OpenRouter key, play hands of Texas Hold'em against language models, and watch ELO move. Your key never leaves your browser.",
 };
 
-const SHELL = "mx-auto w-full max-w-[1100px] px-10";
-
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-      {children}
-    </span>
-  );
-}
+const SHELL = "mx-auto w-full max-w-[760px] px-6";
 
 function Section({
-  num,
-  label,
+  anchor,
   title,
   lede,
   children,
 }: {
-  num: string;
-  label: string;
-  title: React.ReactNode;
+  anchor: string;
+  title: string;
   lede?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   return (
-    <section className={`${SHELL} py-14 lg:py-20`} id={label.toLowerCase().replace(/\s+/g, "-")}>
-      <div className="grid items-start gap-10 lg:grid-cols-[200px_1fr]">
-        <div className="lg:sticky lg:top-22">
-          <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-primary">
-            {num}
-          </div>
-          <div className="mt-1 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-            {label}
-          </div>
-        </div>
-        <div className="grid gap-5">
-          <h2 className="font-heading text-3xl font-normal leading-[1.05] tracking-tight text-balance md:text-4xl">
-            {title}
-          </h2>
-          {lede && (
-            <p className="max-w-[60ch] text-[16px] leading-[1.6] text-muted-foreground">
-              {lede}
-            </p>
-          )}
-          {children}
-        </div>
-      </div>
+    <section className={`${SHELL} pt-12`} id={anchor}>
+      <h2 className="font-heading text-2xl font-normal leading-tight tracking-tight md:text-[28px]">
+        {title}
+      </h2>
+      {lede && (
+        <p className="mt-3 max-w-[64ch] text-[15.5px] leading-[1.6] text-muted-foreground">
+          {lede}
+        </p>
+      )}
+      {children && <div className="mt-5 grid gap-4">{children}</div>}
     </section>
   );
 }
@@ -67,17 +42,13 @@ export default async function HowItWorksPage() {
   cacheLife("hours");
   return (
     <SiteShell>
-      <main>
+      <main className="pb-24">
         {/* ─── HERO ─── */}
-        <header className={`${SHELL} pt-24 pb-10`}>
-          <Eyebrow>
-            <span className="size-1.5 rounded-full bg-primary" />
-            How it works
-          </Eyebrow>
-          <h1 className="mt-6 font-heading text-[clamp(44px,6vw,80px)] font-normal leading-[0.96] tracking-[-0.022em] text-balance max-w-[18ch]">
-            One key. <em className="italic text-foreground/60">No surprises.</em>
+        <header className={`${SHELL} pt-20 pb-2`}>
+          <h1 className="font-heading text-[clamp(34px,4.5vw,56px)] font-normal leading-[1.02] tracking-[-0.018em]">
+            How PokerLM works
           </h1>
-          <p className="mt-6 max-w-[64ch] text-[17px] leading-[1.55] text-foreground/80">
+          <p className="mt-5 max-w-[64ch] text-[15.5px] leading-[1.6] text-foreground/80">
             PokerLM is BYO-key. Your OpenRouter key stays in your browser session,
             calls fan out to whichever models your players use, and we write
             virtual chips + ELO to our database. We don&apos;t see your bill, and
@@ -85,13 +56,9 @@ export default async function HowItWorksPage() {
           </p>
         </header>
 
-        <Separator />
-
-        {/* 01 ─── KEY HANDLING ─── */}
         <Section
-          num="01"
-          label="Your key"
-          title={<>Your key, <em className="italic text-foreground/60">your wallet</em>.</>}
+          anchor="your-key"
+          title="Your key"
           lede={
             <>
               We use OpenRouter as the gateway to every model. When you paste a
@@ -129,13 +96,9 @@ export default async function HowItWorksPage() {
           </ul>
         </Section>
 
-        <Separator />
-
-        {/* 02 ─── WHY OPENROUTER ONLY ─── */}
         <Section
-          num="02"
-          label="OpenRouter only"
-          title={<>OpenRouter only, <em className="italic text-foreground/60">on purpose</em>.</>}
+          anchor="openrouter-only"
+          title="OpenRouter only"
           lede={
             <>
               We could let you paste an Anthropic, OpenAI, or Google key directly.
@@ -168,18 +131,18 @@ export default async function HowItWorksPage() {
           </div>
         </Section>
 
-        <Separator />
-
-        {/* 03 ─── THROWAWAY KEY ─── */}
         <Section
-          num="03"
-          label="Throwaway key"
-          title={<>Use a <em className="italic text-foreground/60">capped, throwaway</em> key.</>}
+          anchor="throwaway-keys"
+          title="Throwaway keys"
           lede={
             <>
               You should never paste a long-lived production key into a tab you
               don&apos;t fully trust — including ours. OpenRouter lets you mint
-              short-lived keys with hard spend limits in 30 seconds.
+              short-lived keys with hard spend limits in 30 seconds. Our
+              recommendation: <span className="text-foreground">$1 cap, 1-hour
+              expiry</span>. Plenty for an evening of cheap-tier hands; if the
+              key leaks the worst case is a dollar and it&apos;s dead within
+              the hour anyway.
             </>
           }
         >
@@ -187,9 +150,9 @@ export default async function HowItWorksPage() {
             {[
               "Open OpenRouter → Settings → Keys.",
               "Create a new key. Set a name like “pokerlm-2026-05”.",
-              "Set a hard credit limit (e.g. $5 or $10). Save the key.",
+              "Set a $1 hard credit limit and a 1-hour expiry. Save the key.",
               "Paste it into the KEY chip in the navbar, top right.",
-              "Rotate or delete it from OpenRouter whenever you stop playing.",
+              "Mint a fresh key next time you play. No rotation needed — old keys self-expire.",
             ].map((step, i) => (
               <li key={i} className="flex items-start gap-3">
                 <span className="grid size-6 shrink-0 place-items-center rounded-full border border-primary/40 bg-primary/10 font-mono text-[11px] text-primary">
@@ -214,13 +177,9 @@ export default async function HowItWorksPage() {
           </div>
         </Section>
 
-        <Separator />
-
-        {/* 04 ─── WHAT WE STORE ─── */}
         <Section
-          num="04"
-          label="What we store"
-          title={<>What we <em className="italic text-foreground/60">do</em> store.</>}
+          anchor="what-we-store"
+          title="What we store"
           lede="Anything tied to gameplay history is in our database. Your key, your prompts, and your spend are not."
         >
           <div className="grid gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-2">
@@ -235,6 +194,7 @@ export default async function HowItWorksPage() {
                 <li>· Rooms you created and seats you took</li>
                 <li>· Every action of every hand you played</li>
                 <li>· Per-player ELO rating + history snapshots</li>
+                <li>· Per-seat session notes (cleared when you leave the room)</li>
               </ul>
             </div>
             <div className="grid gap-3 bg-card p-6">
@@ -252,13 +212,61 @@ export default async function HowItWorksPage() {
           </div>
         </Section>
 
-        <Separator />
-
-        {/* 05 ─── COST GUIDANCE ─── */}
         <Section
-          num="05"
-          label="Cost"
-          title={<>Pennies per hand, if you <em className="italic text-foreground/60">choose well</em>.</>}
+          anchor="bots-take-notes"
+          title="Bots take notes"
+          lede={
+            <>
+              At the end of every hand, each of your seated players gets a chance
+              to update a short freeform note about the table. They use those
+              notes on every future hand at the same table — so they pick up on
+              who bluffs, who only c-bets the flop, who shows down trash. It&apos;s
+              the same thing a real grinder does with a notepad next to the
+              laptop.
+            </>
+          }
+        >
+          <ul className="grid gap-3 text-[15px] leading-[1.55] text-foreground/85">
+            {[
+              <>
+                <strong className="text-foreground">One note per seat.</strong>{" "}
+                Scoped to <em className="italic text-foreground/70">this seating at this table</em>.
+                Leave the room and the note is wiped. Sit again — fresh slate.
+                Cross-table memory is intentionally not a thing.
+              </>,
+              <>
+                <strong className="text-foreground">The bot decides whether to update.</strong>{" "}
+                After each completed hand we hand the model an{" "}
+                <span className="font-mono text-foreground">update_memory</span>{" "}
+                tool and the full hand transcript. If it has nothing new to say,
+                it doesn&apos;t call. If it does, the new text fully replaces the
+                old (≤1000 chars).
+              </>,
+              <>
+                <strong className="text-foreground">You can peek.</strong>{" "}
+                On the felt, every seat you own has a small sticky-note icon —
+                click to see exactly what your bot is thinking about the table.
+                Read-only; the bot edits its own notes.
+              </>,
+              <>
+                <strong className="text-foreground">Only fires while you&apos;re watching.</strong>{" "}
+                Same constraint as the gameplay calls — your tab is what pays.
+                Close the room and no reflects run. The next hand auto-deals 15
+                seconds after the last one finishes, which is the window the
+                reflect call has to land.
+              </>,
+            ].map((line, i) => (
+              <li key={i} className="flex items-start gap-3 rounded-xl border border-border bg-card p-4">
+                <StickyNote className="mt-0.5 size-4 shrink-0 text-primary" />
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+
+        <Section
+          anchor="cost"
+          title="Cost per hand"
           lede={
             <>
               The expensive part of a hand is reading the table state and producing
@@ -310,13 +318,9 @@ export default async function HowItWorksPage() {
           </p>
         </Section>
 
-        <Separator />
-
-        {/* 06 ─── DATA FLOW ─── */}
         <Section
-          num="06"
-          label="Flow"
-          title={<>How a hand <em className="italic text-foreground/60">runs</em>.</>}
+          anchor="hand-flow"
+          title="Hand flow"
           lede="When it's your seat's turn, here's what happens on the wire."
         >
           <ol className="grid gap-3">
@@ -356,8 +360,10 @@ export default async function HowItWorksPage() {
               {
                 t: "Showdown",
                 d: <>
-                  When the hand ends, ELO updates pairwise (K = 24), one history
-                  row per participant. The next hand is scheduled +3s later.
+                  When the hand ends, ELO updates pairwise (K = 24). Each of
+                  your watching players fires a reflect call to update its
+                  session notes. The next hand auto-deals +15s later — enough
+                  window for the reflects to land.
                 </>,
               },
             ].map((step, i) => (
@@ -379,45 +385,6 @@ export default async function HowItWorksPage() {
           </ol>
         </Section>
 
-        <Separator />
-
-        {/* CTA */}
-        <section className={`${SHELL} py-20`}>
-          <div className="grid items-center gap-6 rounded-2xl border border-primary/35 bg-primary/5 p-8 lg:grid-cols-[1fr_auto]">
-            <div className="grid gap-2">
-              <div className="flex items-center gap-2">
-                <Wallet className="size-4 text-primary" />
-                <Badge variant="outline" className="border-primary/35 text-primary">
-                  Ready to play
-                </Badge>
-              </div>
-              <h3 className="font-heading text-[28px] leading-tight tracking-tight">
-                Mint a $5 key. <em className="italic text-foreground/60">Sit at a table.</em>
-              </h3>
-              <p className="max-w-[58ch] text-[14.5px] leading-[1.5] text-muted-foreground">
-                That&apos;s usually a few thousand hands at the cheap tier — way
-                more than you need to see if PokerLM is for you.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2.5">
-              <Button asChild variant="outline">
-                <a
-                  href="https://openrouter.ai/settings/keys"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Get an OpenRouter key
-                </a>
-              </Button>
-              <Button asChild>
-                <Link href="/rooms">
-                  Find a table
-                  <ArrowRight />
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </section>
       </main>
     </SiteShell>
   );

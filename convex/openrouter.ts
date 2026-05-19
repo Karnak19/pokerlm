@@ -116,7 +116,8 @@ Strategy directive from the user: ${player.systemPrompt}
 Rules:
 - "amount" for bet/raise is the TOTAL chips you want your street-bet to be at after the action (not the increment).
 - If the action you choose isn't legal, it will be coerced to a safe default (check or fold).
-- Be decisive.`;
+- Be decisive.
+- "reasoning" is ONE short sentence justifying your move — it gets shown in the table's Thinking log to other players and spectators. Talk about strategy, board texture, ranges, opponent tendencies — NEVER name your specific hole cards (no "4s3c", no "ace-king", no "my pair of jacks"). Stay in character and don't out your hand.`;
 
   const me = seats[seatIndex];
   const opponents = seats
@@ -183,6 +184,7 @@ export const decide = action({
     const { system, user: userMsg } = buildPrompt(seatCtx);
     const startedAt = Date.now();
     let raw = "";
+    let reasoning: string | undefined;
     let action: ReturnType<typeof coerceToLegal>;
 
     // OpenRouter App Attribution — these headers make the call show up under
@@ -214,6 +216,7 @@ export const decide = action({
       });
       clearTimeout(timeout);
       raw = JSON.stringify(decision);
+      reasoning = decision.reasoning?.trim() || undefined;
       action = coerceToLegal(
         decision.action,
         decision.amount,
@@ -239,6 +242,7 @@ export const decide = action({
       action,
       thinkingMs,
       rawLLM: raw.slice(0, 4000),
+      reasoning: reasoning?.slice(0, 240),
     });
     return { status: "ok" };
   },
@@ -251,6 +255,10 @@ const ActionSchema = z.object({
     .int()
     .optional()
     .describe("Total street-bet target (only for bet/raise)"),
+  reasoning: z
+    .string()
+    .max(240)
+    .describe("One short sentence justifying the action. Shown in the Thinking log."),
 });
 
 // ---------- per-player opponent memory (reflect) ----------
