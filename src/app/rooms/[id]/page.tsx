@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 import { AnimatePresence, motion } from "framer-motion";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { useCardSound, useChipSound, useSoundMute } from "@/lib/sounds";
-import { Volume2, VolumeX, StickyNote } from "lucide-react";
+import { Volume2, VolumeX, StickyNote, ChevronDown } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Dialog,
@@ -141,11 +141,15 @@ const SEAT_OFFSET_FROM_CENTER: Array<[number, number]> = [
   [-430, -110],  // 5 top left
 ];
 
+// Cards sit OUTSIDE the seat card on the side facing the table center, so
+// they don't cover the stack/badge inside the seat. Side seats already use
+// 100% anchoring; top/bottom seats now do the same instead of negative
+// offsets that punched back into the body.
 const HOLE_STYLE: CSSProperties[] = [
-  { bottom: -22, left: "50%", transform: "translateX(-50%)" },
+  { top: "100%", left: "50%", marginTop: 6, transform: "translateX(-50%)" },
   { right: "100%", top: "50%", marginRight: 8, transform: "translateY(-50%)" },
   { right: "100%", top: "50%", marginRight: 8, transform: "translateY(-50%)" },
-  { top: -22, left: "50%", transform: "translateX(-50%)" },
+  { bottom: "100%", left: "50%", marginBottom: 6, transform: "translateX(-50%)" },
   { left: "100%", top: "50%", marginLeft: 8, transform: "translateY(-50%)" },
   { left: "100%", top: "50%", marginLeft: 8, transform: "translateY(-50%)" },
 ];
@@ -575,10 +579,21 @@ export default function RoomPage() {
                     : "bg-muted/40 text-white/75";
 
                   if (!seat) {
+                    // Resolve the player about to be seated: explicit selection, else
+                    // first non-retired affordable player, else first player as last resort.
+                    const eligible = (myPlayers ?? []).filter(
+                      (p) => p.status !== "retired" && (p.bankroll ?? 5000) >= room.startingStack,
+                    );
+                    const fallback = eligible[0] ?? myPlayers?.[0];
+                    const activePid = (selectedPlayer || fallback?._id) as Id<"players"> | undefined;
+                    const active = myPlayers?.find((p) => p._id === activePid);
+                    const canSit =
+                      !!active && active.status !== "retired" &&
+                      (active.bankroll ?? 5000) >= room.startingStack;
                     return (
                       <div
                         key={idx}
-                        className="absolute grid min-w-[180px] max-w-[220px] grid-cols-[44px_1fr] items-center gap-2.5 rounded-[14px] border border-dashed border-white/15 bg-background/40 px-3 py-2.5 opacity-55 backdrop-blur-sm"
+                        className="absolute grid min-w-[180px] max-w-[220px] grid-cols-[44px_1fr] items-center gap-2.5 rounded-[14px] border border-dashed border-white/15 bg-background/40 px-3 py-2.5 opacity-80 backdrop-blur-sm"
                         style={SEAT_STYLE[pos]}
                       >
                         <Avatar className="pl-av size-11 border-dashed text-white/40">
@@ -588,17 +603,61 @@ export default function RoomPage() {
                           <span className="truncate text-[13.5px] text-white/95">Empty seat</span>
                           <span className="font-mono text-[10.5px] text-white/55">seat {idx + 1}</span>
                           {room.status === "waiting" && !mySeat && myPlayers && myPlayers.length > 0 && (
-                            <div className="mt-1">
+                            <div className="mt-1 flex items-center gap-1">
                               <Button
                                 variant="outline"
                                 size="xs"
                                 type="button"
+                                disabled={!canSit}
                                 onClick={() => {
-                                  const pid = selectedPlayer || (myPlayers[0]?._id as Id<"players">);
-                                  if (!pid) return;
-                                  void trySit(pid);
+                                  if (!activePid || !canSit) return;
+                                  void trySit(activePid);
                                 }}
-                              >Sit</Button>
+                              >
+                                Sit as {active?.name ?? "…"}
+                              </Button>
+                              {myPlayers.length > 1 && (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <button
+                                      type="button"
+                                      aria-label="Change player"
+                                      className="inline-flex size-5 items-center justify-center rounded text-white/60 hover:bg-white/10 hover:text-white"
+                                    >
+                                      <ChevronDown className="size-3.5" />
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent side="bottom" align="start" className="w-56 p-1">
+                                    <div className="grid gap-0.5">
+                                      {myPlayers.map((p) => {
+                                        const roll = p.bankroll ?? 5000;
+                                        const retired = p.status === "retired";
+                                        const tooPoor = !retired && roll < room.startingStack;
+                                        const disabled = retired || tooPoor;
+                                        return (
+                                          <button
+                                            key={p._id}
+                                            type="button"
+                                            disabled={disabled}
+                                            onClick={() => setSelectedPlayer(p._id)}
+                                            className={cn(
+                                              "flex items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-xs",
+                                              !disabled && "hover:bg-accent",
+                                              disabled && "opacity-50 cursor-not-allowed",
+                                              p._id === activePid && "bg-accent/50",
+                                            )}
+                                          >
+                                            <span className="truncate">{p.name}</span>
+                                            <span className="font-mono text-[10px] text-muted-foreground tabular-nums">
+                                              {retired ? "retired" : `$${roll}`}
+                                            </span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
+                              )}
                             </div>
                           )}
                         </div>
@@ -930,7 +989,9 @@ export default function RoomPage() {
             </Card>
           </div>
 
-          {/* Sit selector when waiting + no seat */}
+          {/* Sit-to-play hint when waiting + no seat. The actual sit UI lives
+              on each empty-seat tile so the player picker is local to the act
+              of sitting. */}
           {room.status === "waiting" && !mySeat && (
             <div className="mt-5 flex flex-wrap items-center gap-3 rounded-[14px] border border-dashed border-border px-4 py-3 text-xs text-muted-foreground">
               {myPlayers && myPlayers.length === 0 ? (
@@ -941,45 +1002,15 @@ export default function RoomPage() {
                   </Button>
                 </>
               ) : (
-                <>
-                  <span>Take a seat:</span>
-                  <select
-                    className="w-[280px] rounded-md border border-border bg-transparent px-2 py-1.5 font-mono text-xs text-foreground"
-                    value={selectedPlayer}
-                    onChange={(e) => setSelectedPlayer(e.target.value as Id<"players">)}
-                  >
-                    <option value="">Choose a player…</option>
-                    {myPlayers?.map((p) => {
-                      const roll = p.bankroll ?? 5000;
-                      const retired = p.status === "retired";
-                      const cantAfford = !retired && roll < room.startingStack;
-                      const tag = retired
-                        ? " · retired"
-                        : cantAfford
-                          ? ` · $${roll} (need $${room.startingStack})`
-                          : ` · $${roll}`;
-                      return (
-                        <option
-                          key={p._id}
-                          value={p._id}
-                          disabled={retired || cantAfford}
-                        >
-                          {p.name} ({p.model}){tag}
-                        </option>
-                      );
-                    })}
-                  </select>
-                  <Button
-                    size="sm"
-                    disabled={!selectedPlayer}
-                    onClick={() => selectedPlayer && void trySit(selectedPlayer as Id<"players">)}
-                  >Sit (${room.startingStack})</Button>
-                  {sitError && (
-                    <span className="basis-full font-mono text-[11px] text-destructive">
-                      {sitError}
-                    </span>
-                  )}
-                </>
+                <span>
+                  Click <em className="font-heading not-italic text-foreground/80">Sit as …</em> on
+                  any empty seat to join. Buy-in: ${room.startingStack}.
+                </span>
+              )}
+              {sitError && (
+                <span className="basis-full font-mono text-[11px] text-destructive">
+                  {sitError}
+                </span>
               )}
             </div>
           )}

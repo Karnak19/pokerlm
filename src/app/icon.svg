@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <radialGradient id="felt" cx="30%" cy="25%" r="80%">
+      <stop offset="0%" stop-color="oklch(0.31 0.045 145)"/>
+      <stop offset="60%" stop-color="oklch(0.21 0.038 155)"/>
+    </radialGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="url(#felt)"/>
+  <rect width="32" height="32" rx="7" fill="none" stroke="oklch(0.76 0.135 145 / 0.30)"/>
+  <g transform="translate(4 4) scale(1)">
+    <path
+      d="M12 2.5c2.6 3.4 7.5 6.5 7.5 11a5.5 5.5 0 0 1-7 5.3l1 2.7H10.5l1-2.7a5.5 5.5 0 0 1-7-5.3C4.5 9 9.4 5.9 12 2.5Z"
+      fill="oklch(0.76 0.135 145)"
+    />
+  </g>
+</svg>
