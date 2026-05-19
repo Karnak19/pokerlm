@@ -22,6 +22,7 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { MoreVertical, Plus, Upload, Search, Archive, Trash2, ArrowRight } from "lucide-react";
+import { RatingChart } from "@/components/rating-chart";
 
 type OpenRouterModel = {
   id: string;
@@ -96,6 +97,25 @@ export default function PlayersPage() {
   const [model, setModel] = useState(CURATED_MODELS[0].id);
   const [systemPrompt, setSystemPrompt] = useState(DEFAULT_SYSTEM_PROMPT);
   const [editingId, setEditingId] = useState<Id<"players"> | null>(null);
+  const editingHistory = useQuery(
+    api.leaderboard.history,
+    editingId ? { playerId: editingId, limit: 200 } : "skip",
+  );
+
+  // Derived numbers for the editor side panel.
+  const editorStats = useMemo(() => {
+    if (!editingHistory || editingHistory.length === 0) {
+      return { peak: null, sevenDayDelta: null };
+    }
+    const peak = Math.max(...editingHistory.map((p) => p.rating));
+    // eslint-disable-next-line react-hooks/purity -- recomputing the 7d window on each query update is intentional
+    const sevenDayAgo = Date.now() - 7 * 24 * 3600 * 1000;
+    const inWindow = editingHistory.filter((p) => p.at >= sevenDayAgo);
+    if (inWindow.length < 2) return { peak, sevenDayDelta: null };
+    const sevenDayDelta =
+      inWindow[inWindow.length - 1].rating - (inWindow[0].rating - inWindow[0].delta);
+    return { peak, sevenDayDelta };
+  }, [editingHistory]);
   const [submitting, setSubmitting] = useState(false);
   const [models, setModels] = useState<ModelOption[]>(CURATED_MODELS);
   const [modelsLoading, setModelsLoading] = useState(true);
@@ -598,48 +618,48 @@ export default function PlayersPage() {
                         </span>
                       </div>
 
-                      <div className="grid gap-1.5">
-                        <div className="grid grid-cols-[auto_1fr_auto] items-baseline gap-3">
-                          <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">ELO</span>
-                          <span className="font-mono text-[22px] tabular-nums text-foreground">1,500</span>
-                          <span className="font-mono text-[11px] tabular-nums text-primary">+0</span>
-                        </div>
-                        <div className="relative h-14 overflow-hidden rounded-md border border-border bg-background/40">
-                          <svg width="100%" height="56" viewBox="0 0 280 56" preserveAspectRatio="none" className="block">
-                            <defs>
-                              <linearGradient id="elo-fill" x1="0" x2="0" y1="0" y2="1">
-                                <stop offset="0%" stopColor="oklch(0.76 0.135 145)" stopOpacity="0.35" />
-                                <stop offset="100%" stopColor="oklch(0.76 0.135 145)" stopOpacity="0" />
-                              </linearGradient>
-                            </defs>
-                            <path
-                              d="M0,38 L18,34 L34,40 L52,30 L68,32 L86,22 L102,26 L122,18 L140,24 L158,16 L176,20 L196,12 L214,18 L232,10 L252,14 L280,6 L280,56 L0,56 Z"
-                              fill="url(#elo-fill)"
-                            />
-                            <path
-                              d="M0,38 L18,34 L34,40 L52,30 L68,32 L86,22 L102,26 L122,18 L140,24 L158,16 L176,20 L196,12 L214,18 L232,10 L252,14 L280,6"
-                              fill="none"
-                              stroke="oklch(0.76 0.135 145)"
-                              strokeWidth="1.5"
-                            />
-                            <circle cx="280" cy="6" r="3" fill="oklch(0.76 0.135 145)" />
-                          </svg>
-                        </div>
-                        <div className="flex justify-between font-mono text-[9.5px] text-muted-foreground/70">
-                          <span>30d ago · 1,500</span>
-                          <span>15d</span>
-                          <span>now · 1,500</span>
-                        </div>
-                      </div>
+                      {(() => {
+                        const elo = editingId ? eloByPlayer.get(editingId) : undefined;
+                        const { peak, sevenDayDelta } = editorStats;
+                        const winRate =
+                          elo && elo.gamesPlayed > 0 ? (elo.wins / elo.gamesPlayed) * 100 : null;
+                        return (
+                          <>
+                            <div className="grid gap-1.5">
+                              <div className="grid grid-cols-[auto_1fr_auto] items-baseline gap-3">
+                                <span className="font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                                  ELO
+                                </span>
+                                <span className="font-mono text-[22px] tabular-nums text-foreground">
+                                  {elo ? fmtInt(elo.rating) : "—"}
+                                </span>
+                                {sevenDayDelta !== null && sevenDayDelta !== 0 && (
+                                  <span
+                                    className={
+                                      "font-mono text-[11px] tabular-nums " +
+                                      (sevenDayDelta > 0 ? "text-primary" : "text-destructive")
+                                    }
+                                  >
+                                    {sevenDayDelta > 0 ? "+" : ""}
+                                    {sevenDayDelta} · 7d
+                                  </span>
+                                )}
+                              </div>
+                              <RatingChart
+                                points={editingHistory}
+                                className="h-[120px] w-full"
+                              />
+                            </div>
 
-                      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border">
-                        <KvCell k="Peak ELO" v="1,500" em="· —" />
-                        <KvCell k="Win rate" v="—" />
-                        <KvCell k="VPIP / PFR" v="— / —" />
-                        <KvCell k="Avg pot won" v="$0" vClass="text-chip" />
-                        <KvCell k="All-ins · cooler" v="0 / 0" />
-                        <KvCell k="Cost · 0 hands" v="$0.00" em="· spent" />
-                      </div>
+                            <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-border bg-border">
+                              <KvCell k="Peak ELO" v={peak !== null ? fmtInt(peak) : "—"} />
+                              <KvCell k="Hands" v={elo ? fmtInt(elo.gamesPlayed) : "—"} />
+                              <KvCell k="Win rate" v={winRate !== null ? `${winRate.toFixed(1)}%` : "—"} />
+                              <KvCell k="Wins" v={elo ? fmtInt(elo.wins) : "—"} />
+                            </div>
+                          </>
+                        );
+                      })()}
                     </div>
 
                     {editingId && editingPlayer && (

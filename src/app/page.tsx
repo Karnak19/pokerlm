@@ -1,9 +1,7 @@
-"use client";
-
 import Link from "next/link";
-import { useEffect } from "react";
+import { cacheLife } from "next/cache";
 import { Show, SignInButton } from "@clerk/nextjs";
-import { useMutation, useQuery } from "convex/react";
+import { fetchQuery } from "convex/nextjs";
 import { api } from "../../convex/_generated/api";
 import { SiteShell } from "@/components/site-shell";
 import { Button } from "@/components/ui/button";
@@ -11,6 +9,19 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+
+// Hero stats + mini leaderboard get cached for a few minutes. Tradeoff: ELO
+// changes don't appear in real time, but the HTML ships with data already
+// embedded and the JS payload skips reactive subscriptions for these queries.
+async function getHomeData() {
+  "use cache";
+  cacheLife("minutes");
+  const [board, agg] = await Promise.all([
+    fetchQuery(api.leaderboard.top, { limit: 6 }),
+    fetchQuery(api.leaderboard.aggregate, {}),
+  ]);
+  return { board, agg };
+}
 
 // ─────────────────────────────────────────
 // Tiny presentational helpers
@@ -111,15 +122,10 @@ function fmtNum(n: number | null | undefined): string {
   return Math.round(n).toLocaleString("en-US");
 }
 
-export default function Home() {
-  const me = useQuery(api.users.me);
-  const ensureUser = useMutation(api.users.getOrCreateCurrentUser);
-  const board = useQuery(api.leaderboard.top, { limit: 6 });
-  const agg = useQuery(api.leaderboard.aggregate);
-
-  useEffect(() => {
-    if (me === null) void ensureUser({});
-  }, [me, ensureUser]);
+export default async function Home() {
+  // `<Providers>` already bootstraps the user row globally, so we don't
+  // need a per-page useEffect for that.
+  const { board, agg } = await getHomeData();
 
   const stats = {
     players: agg?.rankedPlayers ?? null,
@@ -131,102 +137,48 @@ export default function Home() {
   return (
     <SiteShell>
       {/* ─── HERO ─── */}
-      <header className={`${SHELL} grid items-end gap-14 pt-24 pb-14 lg:grid-cols-[1.4fr_1fr]`} id="top">
-        <div>
-          <Eyebrow>
-            <span className="size-1.5 rounded-full bg-primary shadow-[0_0_0_4px_color-mix(in_oklch,var(--primary)_20%,transparent)] motion-safe:animate-pulse" />
-            Open table · v0.1 · Texas Hold{"'"}em
-          </Eyebrow>
-          <h1 className="mt-6 font-heading text-[clamp(56px,8.4vw,116px)] font-normal leading-[0.92] tracking-[-0.028em] text-balance">
-            Where models<br />
-            <em className="italic">bluff,</em> raise<br />
-            <span className="italic text-primary text-[0.92em] pr-[0.05em]">&amp;</span> fold.
-          </h1>
-          <p className="mt-7 max-w-[50ch] text-[18px] leading-[1.5] text-foreground/80">
-            Bring your OpenRouter key, write a system prompt, and put your model in a seat.
-            Virtual chips, real ELO. The cheaper model with the sharper prompt usually
-            takes the pot.
-          </p>
-          <div className="mt-9 flex flex-wrap items-center gap-3">
-            <Show when="signed-out">
-              <SignInButton mode="modal">
-                <Button size="lg">
-                  Sit at a table
-                  <span className="ml-1 rounded bg-black/25 px-1.5 py-px font-mono text-[11px] text-primary-foreground/80">
-                    ↵
-                  </span>
-                </Button>
-              </SignInButton>
-            </Show>
-            <Show when="signed-in">
-              <Button size="lg" asChild>
-                <Link href="/rooms">
-                  Sit at a table
-                  <span className="ml-1 rounded bg-black/25 px-1.5 py-px font-mono text-[11px] text-primary-foreground/80">
-                    ↵
-                  </span>
-                </Link>
+      <header className={`${SHELL} pt-24 pb-14`} id="top">
+        <Eyebrow>
+          <span className="size-1.5 rounded-full bg-primary shadow-[0_0_0_4px_color-mix(in_oklch,var(--primary)_20%,transparent)] motion-safe:animate-pulse" />
+          Open table · v0.1 · Texas Hold{"'"}em
+        </Eyebrow>
+        <h1 className="mt-6 font-heading text-[clamp(56px,8.4vw,116px)] font-normal leading-[0.92] tracking-[-0.028em] text-balance max-w-[14ch]">
+          Where models<br />
+          <em className="italic">bluff,</em> raise<br />
+          <span className="italic text-primary text-[0.92em] pr-[0.05em]">&amp;</span> fold.
+        </h1>
+        <p className="mt-7 max-w-[62ch] text-[18px] leading-[1.5] text-foreground/80">
+          Bring your OpenRouter key, write a system prompt, and put your model in a seat.
+          Virtual chips, real ELO. The cheaper model with the sharper prompt usually
+          takes the pot.
+        </p>
+        <div className="mt-9 flex flex-wrap items-center gap-3">
+          <Show when="signed-out">
+            <SignInButton mode="modal">
+              <Button size="lg">
+                Sit at a table
+                <span className="ml-1 rounded bg-black/25 px-1.5 py-px font-mono text-[11px] text-primary-foreground/80">
+                  ↵
+                </span>
               </Button>
-            </Show>
-            <Button size="lg" variant="outline" asChild>
-              <a href="#how">See how it works</a>
+            </SignInButton>
+          </Show>
+          <Show when="signed-in">
+            <Button size="lg" asChild>
+              <Link href="/rooms">
+                Sit at a table
+                <span className="ml-1 rounded bg-black/25 px-1.5 py-px font-mono text-[11px] text-primary-foreground/80">
+                  ↵
+                </span>
+              </Link>
             </Button>
-            <span className="ml-1 font-mono text-[12.5px] text-muted-foreground">
-              no real money · BYO API key
-            </span>
-          </div>
-        </div>
-
-        <div className="relative grid place-items-end self-stretch">
-          <div
-            className="pl-felt relative grid w-full gap-4 overflow-hidden rounded-[calc(var(--radius)*1.8)] p-5"
-            style={{ aspectRatio: "4 / 5", gridTemplateRows: "auto 1fr auto" }}
-            aria-label="Live hand preview"
-          >
-            <div className="grid place-content-center gap-3.5">
-              <div className="flex justify-center gap-2.5">
-                <CardFace rank="A" suit="♥" size="lg" />
-                <CardFace rank="K" suit="♠" size="lg" />
-                <CardFace rank="7" suit="♦" size="lg" />
-                <CardFace rank="2" suit="♣" size="lg" />
-                <CardBack size="lg" />
-              </div>
-              <div className="mt-2 grid justify-items-center gap-1.5">
-                <div className="font-mono text-[28px] tabular-nums tracking-[-0.015em] text-[oklch(0.96_0.01_85)]">
-                  $2,480
-                </div>
-                <div className="text-[10.5px] uppercase tracking-[0.18em] text-white/55">
-                  Pot · turn
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5">
-              {[
-                { l: "S", n: "Shark du Bellagio", m: "claude-3.5-sonnet", st: "$8,420", active: true },
-                { l: "F", n: "Fold Everything", m: "gpt-4o-mini", st: "$4,180" },
-                { l: "R", n: "River Rat", m: "deepseek-r1", st: "$6,100" },
-                { l: "N", n: "Nit-King-95", m: "llama-3.1-70b", st: "$3,300" },
-              ].map((s) => (
-                <div
-                  key={s.n}
-                  className={`grid items-center gap-2.5 rounded-[10px] border bg-background/40 px-3 py-2.5 ${
-                    s.active
-                      ? "border-primary/60 shadow-[0_0_0_1px_color-mix(in_oklch,var(--primary)_30%,transparent),0_0_22px_-6px_color-mix(in_oklch,var(--primary)_40%,transparent)]"
-                      : "border-white/[0.06]"
-                  }`}
-                  style={{ gridTemplateColumns: "36px 1fr auto" }}
-                >
-                  <Avatar letter={s.l} size={36} />
-                  <div className="grid min-w-0 gap-px">
-                    <div className="truncate text-[12.5px] text-[oklch(0.96_0.01_85)]">{s.n}</div>
-                    <div className="truncate font-mono text-[10px] text-white/55">{s.m}</div>
-                  </div>
-                  <div className="font-mono text-xs tabular-nums text-[oklch(0.96_0.01_85)]">{s.st}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+          </Show>
+          <Button size="lg" variant="outline" asChild>
+            <a href="#how">See how it works</a>
+          </Button>
+          <span className="ml-1 font-mono text-[12.5px] text-muted-foreground">
+            no real money · BYO API key
+          </span>
         </div>
       </header>
 
@@ -581,15 +533,12 @@ export default function Home() {
             <span>Hands</span>
             <span>Win%</span>
           </div>
-          {board === undefined && (
-            <div className="px-5 py-8 text-sm text-muted-foreground">Loading…</div>
-          )}
-          {board && board.length === 0 && (
+          {board.length === 0 && (
             <div className="px-5 py-8 font-heading italic text-muted-foreground">
               No rated players yet — play some hands.
             </div>
           )}
-          {board?.map((r, i) => {
+          {board.map((r, i) => {
             const winRate = r.gamesPlayed > 0 ? (r.wins / r.gamesPlayed) * 100 : null;
             const initial = (r.player?.name || "?").trim().charAt(0).toUpperCase();
             return (

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Show, SignInButton, SignOutButton } from "@clerk/nextjs";
@@ -155,15 +155,12 @@ function NavKey() {
 }
 
 function NavUser() {
+  // Just the auth-scoped user row — small, cheap. We intentionally avoid
+  // subscribing to `leaderboard.top` here just to surface best-ELO in the
+  // chip; that's a 50-row reactive subscription on every page load.
   const me = useQuery(api.users.me);
-  const rows = useQuery(api.leaderboard.top, { limit: 50 });
   const initial = (me?.name || me?.email || "?").trim().charAt(0).toUpperCase();
   const display = me?.name || me?.email?.split("@")[0] || "guest";
-  const bestElo = useMemo(() => {
-    if (!me || !rows) return null;
-    for (const r of rows) if (r.owner?._id === me._id) return r.rating;
-    return null;
-  }, [me, rows]);
 
   return (
     <Popover>
@@ -182,14 +179,6 @@ function NavUser() {
             {initial}
           </span>
           <span>{display}</span>
-          {bestElo !== null && (
-            <>
-              <span className="font-mono text-[11px] text-muted-foreground">·</span>
-              <span className="font-mono text-[11px] text-muted-foreground">
-                {bestElo.toLocaleString("en-US")} ELO
-              </span>
-            </>
-          )}
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={10} className="w-56">
