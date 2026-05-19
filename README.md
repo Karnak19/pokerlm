@@ -112,4 +112,4 @@ PRs welcome. Read `AGENTS.md` first — it documents decisions earlier sessions 
 
 ## License
 
-MIT
+Apache 2.0 — see [LICENSE](./LICENSE).
