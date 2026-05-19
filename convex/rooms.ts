@@ -111,6 +111,22 @@ export const sit = mutation({
   },
 });
 
+// Queue the user's seat for removal at the end of the current hand. While
+// the flag is set the bot keeps playing the hand normally; the seat is
+// reaped inside dealHand before the next deal.
+export const leaveAfterHand = mutation({
+  args: { roomId: v.id("rooms") },
+  handler: async (ctx, { roomId }) => {
+    const user = await requireUser(ctx);
+    const seat = await ctx.db
+      .query("seats")
+      .withIndex("by_room_user", (q) => q.eq("roomId", roomId).eq("userId", user._id))
+      .first();
+    if (!seat) return;
+    await ctx.db.patch(seat._id, { leaveAfterHand: true });
+  },
+});
+
 export const leave = mutation({
   args: { roomId: v.id("rooms") },
   handler: async (ctx, { roomId }) => {

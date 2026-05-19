@@ -16,6 +16,16 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 const SUIT_GLYPH: Record<string, string> = { h: "♥", d: "♦", s: "♠", c: "♣" };
 const RED_SUITS = new Set(["h", "d"]);
@@ -132,6 +142,7 @@ export default function RoomPage() {
 
   const sit = useMutation(api.rooms.sit);
   const leave = useMutation(api.rooms.leave);
+  const leaveAfterHand = useMutation(api.rooms.leaveAfterHand);
   const start = useMutation(api.rooms.start);
   const decide = useAction(api.openrouter.decide);
 
@@ -258,18 +269,55 @@ export default function RoomPage() {
                 dealing next hand…
               </span>
             )}
-            {mySeat && (
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  const live = room.status === "playing" && game?.status === "in_progress";
-                  if (live && !confirm("Leaving mid-hand will fold your seat. Continue?")) return;
-                  void leave({ roomId });
-                }}
-              >
-                Leave table
-              </Button>
-            )}
+            {mySeat && (() => {
+              const live = room.status === "playing" && game?.status === "in_progress";
+              if (!live) {
+                return (
+                  <Button variant="destructive" onClick={() => void leave({ roomId })}>
+                    Leave table
+                  </Button>
+                );
+              }
+              return (
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant={mySeat.leaveAfterHand ? "outline" : "destructive"}
+                    >
+                      {mySeat.leaveAfterHand ? "Leaving after hand" : "Leave table"}
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle className="font-heading font-normal">
+                        Leave the <em className="italic text-foreground/60">table</em>?
+                      </DialogTitle>
+                      <DialogDescription>
+                        A hand is in play. You can fold and walk now, or stay
+                        until this hand resolves and leave between hands.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter className="!justify-between gap-3 sm:!justify-between">
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          if (!mySeat.leaveAfterHand) void leaveAfterHand({ roomId });
+                        }}
+                        disabled={mySeat.leaveAfterHand}
+                      >
+                        {mySeat.leaveAfterHand ? "Already queued ✓" : "Leave after this hand"}
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={() => void leave({ roomId })}
+                      >
+                        Fold &amp; leave now
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              );
+            })()}
           </div>
         </header>
 
@@ -457,23 +505,29 @@ export default function RoomPage() {
                         </div>
                       </div>
 
-                      {/* Hole cards */}
+                      {/* Hole cards — keyed by hand# so deal-in fires per hand */}
                       <div
                         className="absolute flex"
                         style={HOLE_STYLE[pos]}
                       >
-                        {showHole && sState?.hole ? (
-                          sState.hole.map((c, i) => (
-                            <div key={i} className={i > 0 ? "-ml-2.5" : ""}>
-                              <CardFace card={c} size="sm" />
-                            </div>
-                          ))
-                        ) : sState ? (
-                          <>
-                            <CardBack size="sm" />
-                            <div className="-ml-2.5"><CardBack size="sm" /></div>
-                          </>
-                        ) : null}
+                        {sState && [0, 1].map((i) => {
+                          const dealDelay = pos * 0.12 + i * 0.06;
+                          return (
+                            <motion.div
+                              key={`${handNumber}-${i}`}
+                              className={i > 0 ? "-ml-2.5" : ""}
+                              initial={{ x: 0, y: -80, opacity: 0, rotate: -25, scale: 0.6 }}
+                              animate={{ x: 0, y: 0, opacity: 1, rotate: 0, scale: 1 }}
+                              transition={{ delay: dealDelay, duration: 0.34, ease: [0.2, 0.7, 0.3, 1] }}
+                            >
+                              {showHole && sState.hole?.[i] ? (
+                                <CardFace card={sState.hole[i]} size="sm" />
+                              ) : (
+                                <CardBack size="sm" />
+                              )}
+                            </motion.div>
+                          );
+                        })}
                       </div>
 
                       {sState && sState.streetBet > 0 && (
@@ -507,10 +561,28 @@ export default function RoomPage() {
 
                 {/* Center stage */}
                 <div className="absolute left-1/2 top-1/2 grid -translate-x-1/2 -translate-y-1/2 place-items-center gap-4">
-                  <div className="flex gap-3">
+                  <div className="flex gap-3" style={{ perspective: 800 }}>
                     {Array.from({ length: 5 }).map((_, i) => {
                       const c = community[i];
-                      return c ? <CardFace key={i} card={c} /> : <CardBack key={i} />;
+                      // Stagger so the flop deals as 3 quick flips, turn/river one each.
+                      const flopBase = community.length === 3 ? i * 0.12 : 0;
+                      return (
+                        <AnimatePresence key={i} mode="wait">
+                          {c ? (
+                            <motion.div
+                              key={`${handNumber}-${i}-${c}`}
+                              initial={{ rotateY: 90, opacity: 0, y: -18 }}
+                              animate={{ rotateY: 0, opacity: 1, y: 0 }}
+                              transition={{ delay: flopBase, duration: 0.36, ease: [0.2, 0.7, 0.3, 1] }}
+                              style={{ transformStyle: "preserve-3d" }}
+                            >
+                              <CardFace card={c} />
+                            </motion.div>
+                          ) : (
+                            <CardBack key={`back-${i}`} />
+                          )}
+                        </AnimatePresence>
+                      );
                     })}
                   </div>
                   <div className="grid justify-items-center gap-1.5">

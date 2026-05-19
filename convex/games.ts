@@ -141,11 +141,20 @@ async function dealHand(ctx: MutationCtx, roomId: Id<"rooms">): Promise<Id<"game
     .first();
   if (!prev || prev.status !== "complete") return null;
 
-  const seats = await ctx.db
+  // Evict anyone who asked to leave after this hand.
+  const seatsRaw = await ctx.db
     .query("seats")
     .withIndex("by_room", (q) => q.eq("roomId", roomId))
     .collect();
-  seats.sort((a, b) => a.seatIndex - b.seatIndex);
+  for (const s of seatsRaw) {
+    if (s.leaveAfterHand) await ctx.db.delete(s._id);
+  }
+  const seats = (await ctx.db
+    .query("seats")
+    .withIndex("by_room", (q) => q.eq("roomId", roomId))
+    .collect()
+  ).sort((a, b) => a.seatIndex - b.seatIndex);
+
   const withChips = seats.filter((s) => s.stack > 0);
   if (withChips.length < 2) {
     // Table can't run another hand — reopen so anyone can sit again.

@@ -45,6 +45,9 @@ export default defineSchema({
       v.literal("all_in"),
       v.literal("sitting_out"),
     ),
+    // Set when the player asks to leave after the current hand finishes;
+    // the seat is removed before the next deal.
+    leaveAfterHand: v.optional(v.boolean()),
   })
     .index("by_room", ["roomId"])
     .index("by_room_user", ["roomId", "userId"])
