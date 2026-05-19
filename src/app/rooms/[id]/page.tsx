@@ -160,6 +160,16 @@ export default function RoomPage() {
   const decide = useAction(api.openrouter.decide);
 
   const [selectedPlayer, setSelectedPlayer] = useState<Id<"players"> | "">("");
+  const [sitError, setSitError] = useState<string | null>(null);
+
+  async function trySit(playerId: Id<"players">) {
+    setSitError(null);
+    try {
+      await sit({ roomId, playerId });
+    } catch (e) {
+      setSitError(e instanceof Error ? e.message : "Sit failed");
+    }
+  }
   // Read once at mount; the OpenRouter-key chip in the nav owns writes to sessionStorage.
   const apiKey = useMemo(() => {
     if (typeof window === "undefined") return "";
@@ -493,7 +503,7 @@ export default function RoomPage() {
                                 onClick={() => {
                                   const pid = selectedPlayer || (myPlayers[0]?._id as Id<"players">);
                                   if (!pid) return;
-                                  void sit({ roomId, playerId: pid });
+                                  void trySit(pid);
                                 }}
                               >Sit</Button>
                             </div>
@@ -798,13 +808,36 @@ export default function RoomPage() {
                     onChange={(e) => setSelectedPlayer(e.target.value as Id<"players">)}
                   >
                     <option value="">Choose a player…</option>
-                    {myPlayers?.map((p) => <option key={p._id} value={p._id}>{p.name} ({p.model})</option>)}
+                    {myPlayers?.map((p) => {
+                      const roll = p.bankroll ?? 5000;
+                      const retired = p.status === "retired";
+                      const cantAfford = !retired && roll < room.startingStack;
+                      const tag = retired
+                        ? " · retired"
+                        : cantAfford
+                          ? ` · $${roll} (need $${room.startingStack})`
+                          : ` · $${roll}`;
+                      return (
+                        <option
+                          key={p._id}
+                          value={p._id}
+                          disabled={retired || cantAfford}
+                        >
+                          {p.name} ({p.model}){tag}
+                        </option>
+                      );
+                    })}
                   </select>
                   <Button
                     size="sm"
                     disabled={!selectedPlayer}
-                    onClick={() => selectedPlayer && sit({ roomId, playerId: selectedPlayer as Id<"players"> })}
-                  >Sit</Button>
+                    onClick={() => selectedPlayer && void trySit(selectedPlayer as Id<"players">)}
+                  >Sit (${room.startingStack})</Button>
+                  {sitError && (
+                    <span className="basis-full font-mono text-[11px] text-destructive">
+                      {sitError}
+                    </span>
+                  )}
                 </>
               )}
             </div>

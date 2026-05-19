@@ -106,24 +106,8 @@ export default function LeaderboardView({
   })();
   const totalHands =
     filtered?.reduce((acc, r) => acc + (r.gamesPlayed ?? 0), 0) ?? 0;
-  const topModel = (() => {
-    if (!filtered || filtered.length === 0) return null;
-    const buckets = new Map<string, { sum: number; n: number }>();
-    for (const r of filtered) {
-      const m = r.player?.model ?? "";
-      if (!m) continue;
-      const b = buckets.get(m) ?? { sum: 0, n: 0 };
-      b.sum += r.rating;
-      b.n += 1;
-      buckets.set(m, b);
-    }
-    let best: { model: string; avg: number } | null = null;
-    for (const [model, { sum, n }] of buckets) {
-      const avg = sum / n;
-      if (!best || avg > best.avg) best = { model, avg };
-    }
-    return best;
-  })();
+  // (Top-model derivation removed — the stat strip surfaces the richest
+  // player now. modelMeta below still gives per-model averages.)
   const myBestRank = (() => {
     if (!me || !filtered) return null;
     for (let i = 0; i < filtered.length; i++) {
@@ -132,6 +116,18 @@ export default function LeaderboardView({
     }
     return null;
   })();
+  // Richest living player from the unfiltered list — survives search/filter.
+  const richest = useMemo(() => {
+    let best: { name: string | undefined; model: string | undefined; bankroll: number } | null = null;
+    for (const r of rows) {
+      if (r.status === "retired") continue;
+      const roll = r.bankroll ?? 0;
+      if (!best || roll > best.bankroll) {
+        best = { name: r.player?.name, model: r.player?.model, bankroll: roll };
+      }
+    }
+    return best;
+  }, [rows]);
   const modelMeta = useMemo(() => {
     if (!filtered) return [];
     const map = new Map<
@@ -401,9 +397,15 @@ export default function LeaderboardView({
               d: "cumulative",
             },
             {
-              l: "Top model",
-              v: <span className="text-[18px]">{topModel?.model ?? "—"}</span>,
-              d: `avg ${topModel ? fmtNum(topModel.avg) : "—"} ELO`,
+              l: "Richest player",
+              v: (
+                <span className="text-chip">
+                  <span className="font-mono tabular-nums text-[22px]">
+                    {richest ? `$${fmtNum(richest.bankroll)}` : "—"}
+                  </span>
+                </span>
+              ),
+              d: richest?.name ?? "no living players yet",
             },
             {
               l: "Your peak rank",
@@ -502,7 +504,7 @@ export default function LeaderboardView({
             <span>ELO</span>
             <span className="hidden md:block">Hands</span>
             <span>Win %</span>
-            <span className="hidden lg:block">Net</span>
+            <span className="hidden lg:block">Bankroll</span>
             <span className="hidden lg:block" />
           </div>
 
@@ -527,6 +529,7 @@ export default function LeaderboardView({
                   isMe && !isTop && "bg-chip/[0.06] hover:bg-chip/10",
                   isTop &&
                     "before:absolute before:top-0 before:bottom-0 before:left-0 before:w-0.5 before:bg-primary",
+                  r.status === "retired" && "opacity-60",
                 )}
               >
                 <div className="flex items-baseline gap-2">
@@ -555,6 +558,14 @@ export default function LeaderboardView({
                           <span className="text-muted-foreground/40">·</span>
                           <span className="rounded-full bg-chip/20 px-1.5 py-px font-mono text-[9.5px] tracking-wider text-chip">
                             YOU
+                          </span>
+                        </>
+                      )}
+                      {r.status === "retired" && (
+                        <>
+                          <span className="text-muted-foreground/40">·</span>
+                          <span className="rounded-full bg-destructive/15 px-1.5 py-px font-mono text-[9.5px] tracking-wider text-destructive">
+                            RETIRED
                           </span>
                         </>
                       )}
@@ -597,8 +608,17 @@ export default function LeaderboardView({
                 >
                   {winRate !== null ? `${winRate.toFixed(1)}%` : "—"}
                 </span>
-                <span className="hidden font-mono tabular-nums text-[13px] text-muted-foreground lg:block">
-                  —
+                <span
+                  className={cn(
+                    "hidden font-mono tabular-nums text-[13px] lg:block",
+                    r.status === "retired"
+                      ? "text-destructive"
+                      : r.bankroll && r.bankroll > 0
+                        ? "text-chip"
+                        : "text-muted-foreground",
+                  )}
+                >
+                  {r.status === "retired" ? "$0" : `$${fmtNum(r.bankroll ?? 0)}`}
                 </span>
                 <div className="hidden justify-end lg:flex">
                   <Button

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import type { Doc } from "../../../convex/_generated/dataModel";
 import { SiteShell } from "@/components/site-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,7 +38,18 @@ function SearchIcon() {
 
 export default function RoomsPage() {
   const rooms = useQuery(api.rooms.listOpen);
+  const myPlayers = useQuery(api.players.listMine);
   const [search, setSearch] = useState("");
+
+  // Highest bankroll across all alive players — used to gate the Sit
+  // button on each room card. If none of the user's players can afford a
+  // table's buy-in, the button is disabled.
+  const maxAliveBankroll = useMemo(() => {
+    if (!myPlayers) return null;
+    const alive = myPlayers.filter((p: Doc<"players">) => p.status !== "retired");
+    if (alive.length === 0) return 0;
+    return Math.max(...alive.map((p) => p.bankroll ?? 5000));
+  }, [myPlayers]);
 
   const loading = rooms === undefined;
   const joinable = useMemo(() => {
@@ -244,6 +256,16 @@ export default function RoomsPage() {
                         className="cursor-not-allowed opacity-60"
                       >
                         Waitlist
+                      </Button>
+                    ) : maxAliveBankroll !== null && maxAliveBankroll < r.startingStack ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled
+                        className="cursor-not-allowed opacity-60"
+                        title={`Needs $${r.startingStack} buy-in; your richest player has $${maxAliveBankroll}`}
+                      >
+                        Need ${r.startingStack}
                       </Button>
                     ) : (
                       <Button size="sm" asChild>

@@ -105,6 +105,9 @@ export const top = query({
           rating: Math.round(r.rating),
           gamesPlayed: r.gamesPlayed,
           wins: r.wins,
+          // Bankroll + status default to alive/5000 for pre-bankroll rows.
+          bankroll: player ? player.bankroll ?? 5000 : null,
+          status: player ? (player.status ?? "alive") : null,
           player: player ? { name: player.name, model: player.model } : null,
           owner: owner ? { _id: owner._id, name: owner.name, email: owner.email } : null,
         };
@@ -242,22 +245,39 @@ export const aggregate = query({
   handler: async (ctx) => {
     const rows = await ctx.db.query("elo").collect();
     if (rows.length === 0) {
-      return { rankedPlayers: 0, totalHands: 0, models: 0, topElo: null };
+      return {
+        rankedPlayers: 0,
+        totalHands: 0,
+        models: 0,
+        topElo: null,
+        richest: null,
+      };
     }
     let topElo = -Infinity;
     let totalHands = 0;
     const modelSet = new Set<string>();
+    let richest: { name: string; model: string; bankroll: number } | null = null;
     for (const r of rows) {
       if (r.rating > topElo) topElo = r.rating;
       totalHands += r.gamesPlayed;
       const player = await ctx.db.get(r.playerId);
-      if (player) modelSet.add(player.model);
+      if (!player) continue;
+      modelSet.add(player.model);
+      const roll = player.bankroll ?? 5000;
+      // Retired players are out of the running — they've cashed in for the
+      // last time. Tracking the richest *living* player is the more useful
+      // signal for "who's actually killing it right now".
+      if ((player.status ?? "alive") === "retired") continue;
+      if (!richest || roll > richest.bankroll) {
+        richest = { name: player.name, model: player.model, bankroll: roll };
+      }
     }
     return {
       rankedPlayers: rows.length,
       totalHands,
       models: modelSet.size,
       topElo: Math.round(topElo),
+      richest,
     };
   },
 });

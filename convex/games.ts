@@ -5,6 +5,7 @@ import { applyAction, legalActions, startHand, type Action, type GameState } fro
 import { internal } from "./_generated/api";
 import type { Id, Doc } from "./_generated/dataModel";
 import { updateEloFromGame } from "./leaderboard";
+import { cashOutSeat } from "./rooms";
 
 // Pause between hands so players can see the showdown before chips reset.
 const AUTO_DEAL_DELAY_MS = 3000;
@@ -147,7 +148,10 @@ async function dealHand(ctx: MutationCtx, roomId: Id<"rooms">): Promise<Id<"game
     .withIndex("by_room", (q) => q.eq("roomId", roomId))
     .collect();
   for (const s of seatsRaw) {
-    if (s.leaveAfterHand) await ctx.db.delete(s._id);
+    if (s.leaveAfterHand) {
+      await cashOutSeat(ctx, s);
+      await ctx.db.delete(s._id);
+    }
   }
   const seats = (await ctx.db
     .query("seats")

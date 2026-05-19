@@ -1,9 +1,48 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, type MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { requireUser } from "./users";
 import { applyAction, startHand, type GameState } from "../src/engine/state";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
+import type { Id, Doc } from "./_generated/dataModel";
+import { STARTING_BANKROLL } from "./players";
+
+// Resolve effective bankroll for a player (handles pre-bankroll rows).
+function bankrollOf(player: Doc<"players">): number {
+  return player.bankroll ?? STARTING_BANKROLL;
+}
+
+// A player is "alive" by default if status hasn't been written yet.
+function isAlive(player: Doc<"players">): boolean {
+  return (player.status ?? "alive") === "alive";
+}
+
+// Cash-out: returns the seat's remaining chips to the player's bankroll
+// and retires the player if the resulting bankroll hits 0 AND they have
+// no other seats anywhere. Used by both `leave` and the eviction sweep
+// in `dealHand`. Exported so games.ts can call it.
+export async function cashOutSeat(
+  ctx: MutationCtx,
+  seat: Doc<"seats">,
+): Promise<void> {
+  const player = await ctx.db.get(seat.playerId);
+  if (!player) return;
+  const roll = bankrollOf(player);
+  const next = roll + seat.stack;
+  await ctx.db.patch(seat.playerId, { bankroll: next });
+  if (next > 0) return;
+  // Bankroll hit zero. Retire only if this is the player's last seat.
+  const otherSeats = await ctx.db
+    .query("seats")
+    .filter((q) =>
+      q.and(
+        q.eq(q.field("playerId"), seat.playerId),
+        q.neq(q.field("_id"), seat._id),
+      ),
+    )
+    .collect();
+  if (otherSeats.length > 0) return;
+  await ctx.db.patch(seat.playerId, { status: "retired", retiredAt: Date.now() });
+}
 
 export const listOpen = query({
   args: {},
@@ -87,6 +126,15 @@ export const sit = mutation({
 
     const player = await ctx.db.get(playerId);
     if (!player || player.userId !== user._id) throw new Error("Not your player");
+    if (!isAlive(player)) throw new Error("Player is retired — they busted and can't sit again");
+
+    const buyIn = room.startingStack;
+    const roll = bankrollOf(player);
+    if (roll < buyIn) {
+      throw new Error(
+        `Not enough bankroll: needs $${buyIn}, has $${roll}. Sit at a smaller table or roll a new player.`,
+      );
+    }
 
     const taken = await ctx.db
       .query("seats")
@@ -99,12 +147,15 @@ export const sit = mutation({
     while (usedIndexes.has(seatIndex)) seatIndex++;
     if (seatIndex >= room.maxSeats) throw new Error("No seats free");
 
+    // Deduct the buy-in from the player's bankroll; it will be returned
+    // when they cash out (leave or get evicted in dealHand).
+    await ctx.db.patch(playerId, { bankroll: roll - buyIn });
     await ctx.db.insert("seats", {
       roomId,
       playerId,
       userId: user._id,
       seatIndex,
-      stack: room.startingStack,
+      stack: buyIn,
       status: "active",
     });
     await ctx.db.patch(roomId, { lastActivityAt: Date.now() });
@@ -190,6 +241,9 @@ export const leave = mutation({
       }
     }
 
+    // Cash out the seat's remaining chips back to the player's bankroll
+    // (and retire them if they're now broke with no other seats).
+    await cashOutSeat(ctx, seat);
     await ctx.db.delete(seat._id);
     const remaining = await ctx.db
       .query("seats")

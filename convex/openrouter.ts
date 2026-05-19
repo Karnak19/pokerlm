@@ -47,7 +47,11 @@ export const seatContext = internalQuery({
         streetBet: s.streetBet,
         status: s.status,
       })),
-      player: { name: player.name, model: player.model, systemPrompt: player.systemPrompt },
+      player: {
+        name: player.name,
+        model: player.model,
+        systemPrompt: player.systemPrompt,
+      },
       history: actions.reverse().map((a) => ({
         seatIndex: a.seatIndex,
         kind: a.kind,
@@ -70,13 +74,35 @@ type SeatCtx = {
   street: string;
   currentBet: number;
   bigBlind: number;
-  seats: { seatIndex: number; stack: number; streetBet: number; status: string }[];
+  seats: {
+    seatIndex: number;
+    stack: number;
+    streetBet: number;
+    status: string;
+  }[];
   player: { name: string; model: string; systemPrompt: string };
-  history: { seatIndex: number; kind: string; amount: number; street: string }[];
+  history: {
+    seatIndex: number;
+    kind: string;
+    amount: number;
+    street: string;
+  }[];
 };
 
 function buildPrompt(ctx: SeatCtx): { system: string; user: string } {
-  const { player, hole, community, pot, street, currentBet, bigBlind, seats, seatIndex, legal, history } = ctx;
+  const {
+    player,
+    hole,
+    community,
+    pot,
+    street,
+    currentBet,
+    bigBlind,
+    seats,
+    seatIndex,
+    legal,
+    history,
+  } = ctx;
   const system = `You are a Texas Hold'em poker player.
 Strategy directive from the user: ${player.systemPrompt}
 
@@ -88,7 +114,10 @@ Rules:
   const me = seats[seatIndex];
   const opponents = seats
     .filter((s) => s.seatIndex !== seatIndex && s.status !== "sitting_out")
-    .map((s) => `seat ${s.seatIndex + 1}: stack ${s.stack}, bet ${s.streetBet}, ${s.status}`)
+    .map(
+      (s) =>
+        `seat ${s.seatIndex + 1}: stack ${s.stack}, bet ${s.streetBet}, ${s.status}`,
+    )
     .join("\n");
 
   const legalLines = [
@@ -96,8 +125,11 @@ Rules:
     legal.canCheck && "check",
     legal.canCall && `call (${legal.callAmount} chips)`,
     legal.canBet && `bet (min ${legal.minRaiseTo}, max ${legal.maxRaiseTo})`,
-    legal.canRaise && `raise to (min ${legal.minRaiseTo}, max ${legal.maxRaiseTo})`,
-  ].filter(Boolean).join(", ");
+    legal.canRaise &&
+      `raise to (min ${legal.minRaiseTo}, max ${legal.maxRaiseTo})`,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   const user = `Street: ${street} | Big blind: ${bigBlind} | Pot: ${pot}
 Board: ${community.join(" ") || "(none)"}
@@ -121,8 +153,13 @@ export const decide = action({
     apiKey: v.string(),
     timeoutMs: v.optional(v.number()),
   },
-  handler: async (ctx, { gameId, apiKey, timeoutMs }): Promise<{ status: "ok" | "skipped" | "error"; reason?: string }> => {
-    const seatCtx = await ctx.runQuery(internal.openrouter.seatContext, { gameId });
+  handler: async (
+    ctx,
+    { gameId, apiKey, timeoutMs },
+  ): Promise<{ status: "ok" | "skipped" | "error"; reason?: string }> => {
+    const seatCtx = await ctx.runQuery(internal.openrouter.seatContext, {
+      gameId,
+    });
     if (!seatCtx) return { status: "skipped", reason: "no seat to act" };
 
     const identity = await ctx.auth.getUserIdentity();
@@ -143,12 +180,14 @@ export const decide = action({
     // public leaderboard. Set SITE_URL in Convex env (`npx convex env set
     // SITE_URL https://pokerlm.app`) to override the fallback.
     // https://openrouter.ai/docs/app-attribution
-    const siteUrl = process.env.SITE_URL ?? "https://github.com/Karnak19/pokerlm";
+    const siteUrl =
+      process.env.SITE_URL ?? "https://github.com/Karnak19/pokerlm";
     const openrouter = createOpenRouter({
       apiKey,
       headers: {
         "HTTP-Referer": siteUrl,
         "X-Title": "PokerLM",
+        "X-OpenRouter-Categories": "game",
       },
     });
 
@@ -165,10 +204,18 @@ export const decide = action({
       });
       clearTimeout(timeout);
       raw = JSON.stringify(decision);
-      action = coerceToLegal(decision.action, decision.amount, seatCtx.legal as LegalActions);
+      action = coerceToLegal(
+        decision.action,
+        decision.amount,
+        seatCtx.legal as LegalActions,
+      );
     } catch (e) {
       raw = `error: ${e instanceof Error ? e.message : String(e)}`;
-      action = coerceToLegal(undefined, undefined, seatCtx.legal as LegalActions);
+      action = coerceToLegal(
+        undefined,
+        undefined,
+        seatCtx.legal as LegalActions,
+      );
     }
 
     const thinkingMs = Date.now() - startedAt;
@@ -184,5 +231,9 @@ export const decide = action({
 
 const ActionSchema = z.object({
   action: z.enum(["fold", "check", "call", "bet", "raise", "all_in"]),
-  amount: z.number().int().optional().describe("Total street-bet target (only for bet/raise)"),
+  amount: z
+    .number()
+    .int()
+    .optional()
+    .describe("Total street-bet target (only for bet/raise)"),
 });

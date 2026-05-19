@@ -84,15 +84,25 @@ export default function PlayersPage() {
   }, [myElo]);
 
   const totals = useMemo(() => {
-    if (!myElo || myElo.length === 0) return { peak: null, hands: 0 };
-    let peak = -Infinity;
-    let hands = 0;
-    for (const r of myElo) {
-      if (r.rating > peak) peak = r.rating;
-      hands += r.gamesPlayed;
+    const elo = { peak: null as number | null, hands: 0 };
+    if (myElo && myElo.length > 0) {
+      let peak = -Infinity;
+      for (const r of myElo) {
+        if (r.rating > peak) peak = r.rating;
+        elo.hands += r.gamesPlayed;
+      }
+      elo.peak = peak;
     }
-    return { peak, hands };
-  }, [myElo]);
+    let bankroll = 0;
+    let alive = 0;
+    let retired = 0;
+    for (const p of players ?? []) {
+      if (p.status === "retired") retired += 1;
+      else alive += 1;
+      bankroll += p.bankroll ?? 5000;
+    }
+    return { ...elo, bankroll, alive, retired };
+  }, [myElo, players]);
 
   const [name, setName] = useState("");
   const [model, setModel] = useState(CURATED_MODELS[0].id);
@@ -249,8 +259,8 @@ export default function PlayersPage() {
                 </span>
                 <span className="text-muted-foreground/50">·</span>
                 <span>
-                  <span className="mr-1 text-[9.5px] uppercase tracking-[0.12em] text-muted-foreground">RATED</span>
-                  {fmtInt(myElo?.length ?? 0)}
+                  <span className="mr-1 text-[9.5px] uppercase tracking-[0.12em] text-muted-foreground">BANKROLL</span>
+                  <span className="text-chip">${fmtInt(totals.bankroll)}</span>
                 </span>
               </div>
             </div>
@@ -271,8 +281,12 @@ export default function PlayersPage() {
         <Show when="signed-in">
           {/* STAT STRIP — only honest, derived numbers; no fake deltas */}
           <div className="my-2 mb-9 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border md:grid-cols-3">
-            <StatCell label="Players · roster" value={fmtInt(playerCount)} />
-            <StatCell label="Rated" value={fmtInt(myElo?.length ?? 0)} />
+            <StatCell
+              label="Players"
+              value={fmtInt(totals.alive)}
+              delta={totals.retired > 0 ? `${totals.retired} retired` : undefined}
+            />
+            <StatCell label="Bankroll · total" value={`$${fmtInt(totals.bankroll)}`} valueClass="text-chip" />
             <StatCell label="Hands · all-time" value={fmtInt(totals.hands)} />
           </div>
 
@@ -329,14 +343,19 @@ export default function PlayersPage() {
               const elo = eloByPlayer.get(p._id);
               const winRate = elo && elo.gamesPlayed > 0 ? (elo.wins / elo.gamesPlayed) * 100 : null;
               const { head, tail } = splitLastWord(p.name);
+              const bankroll = p.bankroll ?? 5000;
+              const isRetired = p.status === "retired";
               return (
                 <article
                   key={p._id}
                   className={
-                    "group relative grid gap-3.5 rounded-2xl border bg-card p-5 transition-all hover:-translate-y-px hover:border-primary/30 hover:shadow-[0_16px_36px_-28px_color-mix(in_oklch,var(--primary)_35%,transparent)] " +
-                    (isEditing
-                      ? "border-chip/50 shadow-[0_0_0_1px_color-mix(in_oklch,var(--chip)_25%,transparent),0_16px_36px_-22px_color-mix(in_oklch,var(--chip)_30%,transparent)]"
-                      : "border-border")
+                    "group relative grid gap-3.5 rounded-2xl border bg-card p-5 transition-all " +
+                    (isRetired
+                      ? "border-border opacity-65"
+                      : "hover:-translate-y-px hover:border-primary/30 hover:shadow-[0_16px_36px_-28px_color-mix(in_oklch,var(--primary)_35%,transparent)] " +
+                        (isEditing
+                          ? "border-chip/50 shadow-[0_0_0_1px_color-mix(in_oklch,var(--chip)_25%,transparent),0_16px_36px_-22px_color-mix(in_oklch,var(--chip)_30%,transparent)]"
+                          : "border-border"))
                   }
                 >
                   <div className="grid grid-cols-[44px_1fr_auto] items-start gap-3">
@@ -369,9 +388,11 @@ export default function PlayersPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => beginEdit(p)}>Edit</DropdownMenuItem>
-                        <DropdownMenuItem>Duplicate</DropdownMenuItem>
-                        <DropdownMenuItem>Archive</DropdownMenuItem>
+                        {!isRetired && (
+                          <DropdownMenuItem onClick={() => beginEdit(p)}>Edit</DropdownMenuItem>
+                        )}
+                        {!isRetired && <DropdownMenuItem>Duplicate</DropdownMenuItem>}
+                        {!isRetired && <DropdownMenuItem>Archive</DropdownMenuItem>}
                         <DropdownMenuItem
                           variant="destructive"
                           onClick={() => {
@@ -391,7 +412,13 @@ export default function PlayersPage() {
                     {p.systemPrompt}
                   </p>
 
-                  <div className="grid grid-cols-3 gap-3 border-y border-dashed border-border py-3">
+                  <div className="grid grid-cols-4 gap-3 border-y border-dashed border-border py-3">
+                    <StatCell
+                      mini
+                      label="Bankroll"
+                      value={isRetired ? "$0" : `$${fmtInt(bankroll)}`}
+                      valueClass={isRetired ? "text-destructive" : bankroll > 0 ? "text-chip" : "text-muted-foreground"}
+                    />
                     <StatCell
                       mini
                       label="ELO"
@@ -408,7 +435,17 @@ export default function PlayersPage() {
 
                   <div className="flex items-center justify-between gap-3">
                     <span className="inline-flex items-center gap-1.5 font-mono text-[10.5px] text-muted-foreground">
-                      {isEditing ? (
+                      {isRetired ? (
+                        <Badge variant="outline" className="border-destructive/40 text-destructive">
+                          <span className="size-1.5 rounded-full bg-destructive" />
+                          Retired
+                          {p.retiredAt && (
+                            <span className="ml-1 opacity-70">
+                              · {new Date(p.retiredAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                            </span>
+                          )}
+                        </Badge>
+                      ) : isEditing ? (
                         <>
                           <Badge variant="outline" className="border-chip/35 text-chip">
                             <span className="size-1.5 rounded-full bg-chip" />
@@ -424,9 +461,11 @@ export default function PlayersPage() {
                       )}
                     </span>
                     <div className="flex gap-1.5">
-                      <Button variant="outline" size="xs" type="button" onClick={() => beginEdit(p)}>
-                        Edit
-                      </Button>
+                      {!isRetired && (
+                        <Button variant="outline" size="xs" type="button" onClick={() => beginEdit(p)}>
+                          Edit
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="xs"

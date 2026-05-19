@@ -15,6 +15,12 @@ export default defineSchema({
     model: v.string(),
     systemPrompt: v.string(),
     createdAt: v.number(),
+    // Persistent bankroll across sessions. The player buys in to a room
+    // from this pile and cashes out back into it on leave. When it hits 0
+    // and no other seats are held, the player is retired permanently.
+    bankroll: v.optional(v.number()),
+    status: v.optional(v.union(v.literal("alive"), v.literal("retired"))),
+    retiredAt: v.optional(v.number()),
   }).index("by_user", ["userId"]),
 
   rooms: defineTable({
