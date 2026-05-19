@@ -210,12 +210,17 @@ export const decide = action({
         seatCtx.legal as LegalActions,
       );
     } catch (e) {
-      raw = `error: ${e instanceof Error ? e.message : String(e)}`;
+      // Keep the full upstream error in server logs for debugging, but
+      // show a clean line in the hand log — players don't need to read
+      // OpenRouter typos. Falls through to a safe legal action below.
+      const detail = e instanceof Error ? e.message : String(e);
+      console.error("openrouter.decide failed:", detail);
       action = coerceToLegal(
         undefined,
         undefined,
         seatCtx.legal as LegalActions,
       );
+      raw = `decision unavailable — defaulted to ${action.kind}`;
     }
 
     const thinkingMs = Date.now() - startedAt;

@@ -33,10 +33,13 @@ const RED_SUITS = new Set(["h", "d"]);
 
 function parseCard(c: string): { rank: string; suit: string; glyph: string; red: boolean } | null {
   if (!c || c.length < 2) return null;
-  const rank = c.slice(0, c.length - 1).toUpperCase();
+  const raw = c.slice(0, c.length - 1).toUpperCase();
   const suit = c.slice(-1).toLowerCase();
   const glyph = SUIT_GLYPH[suit];
   if (!glyph) return null;
+  // Storage uses single-char ranks ("T" for ten) so every card fits in two
+  // chars. Display unswaps T → 10 because that's what humans expect.
+  const rank = raw === "T" ? "10" : raw;
   return { rank, suit, glyph, red: RED_SUITS.has(suit) };
 }
 
