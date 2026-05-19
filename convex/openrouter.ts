@@ -1,10 +1,13 @@
-import { action, internalQuery } from "./_generated/server";
+import { action, internalMutation, internalQuery } from "./_generated/server";
 import { internal, api } from "./_generated/api";
 import { v } from "convex/values";
 import type { GameState, LegalActions } from "../src/engine/state";
 import { legalActions } from "../src/engine/state";
-import { parseLLMAction } from "../src/engine/llmParse";
+import { coerceToLegal } from "../src/engine/llmParse";
 import type { Id } from "./_generated/dataModel";
+import { generateText, Output, tool } from "ai";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { z } from "zod";
 
 // Internal query — read everything the action needs in one shot (consistent snapshot).
 export const seatContext = internalQuery({
@@ -26,10 +29,15 @@ export const seatContext = internalQuery({
       .withIndex("by_game", (q) => q.eq("gameId", gameId))
       .order("desc")
       .take(30);
+    const memory = await ctx.db
+      .query("memories")
+      .withIndex("by_seat", (q) => q.eq("seatId", seatId))
+      .first();
     return {
       gameId,
       seatIndex: state.toAct,
       ownerUserId: seat.userId,
+      memoryText: memory?.text ?? null,
       state,
       legal: legalActions(state),
       hole: state.seats[state.toAct].hole,
@@ -44,7 +52,11 @@ export const seatContext = internalQuery({
         streetBet: s.streetBet,
         status: s.status,
       })),
-      player: { name: player.name, model: player.model, systemPrompt: player.systemPrompt },
+      player: {
+        name: player.name,
+        model: player.model,
+        systemPrompt: player.systemPrompt,
+      },
       history: actions.reverse().map((a) => ({
         seatIndex: a.seatIndex,
         kind: a.kind,
@@ -59,6 +71,7 @@ type SeatCtx = {
   gameId: Id<"games">;
   seatIndex: number;
   ownerUserId: Id<"users">;
+  memoryText: string | null;
   state: GameState;
   legal: LegalActions;
   hole: [string, string] | null;
@@ -67,28 +80,52 @@ type SeatCtx = {
   street: string;
   currentBet: number;
   bigBlind: number;
-  seats: { seatIndex: number; stack: number; streetBet: number; status: string }[];
+  seats: {
+    seatIndex: number;
+    stack: number;
+    streetBet: number;
+    status: string;
+  }[];
   player: { name: string; model: string; systemPrompt: string };
-  history: { seatIndex: number; kind: string; amount: number; street: string }[];
+  history: {
+    seatIndex: number;
+    kind: string;
+    amount: number;
+    street: string;
+  }[];
 };
 
 function buildPrompt(ctx: SeatCtx): { system: string; user: string } {
-  const { player, hole, community, pot, street, currentBet, bigBlind, seats, seatIndex, legal, history } = ctx;
+  const {
+    player,
+    hole,
+    community,
+    pot,
+    street,
+    currentBet,
+    bigBlind,
+    seats,
+    seatIndex,
+    legal,
+    history,
+    memoryText,
+  } = ctx;
   const system = `You are a Texas Hold'em poker player.
 Strategy directive from the user: ${player.systemPrompt}
 
-You must reply with strictly valid JSON, no prose:
-{"action": "fold" | "check" | "call" | "bet" | "raise" | "all_in", "amount": <integer chips, only when bet/raise>}
-
 Rules:
 - "amount" for bet/raise is the TOTAL chips you want your street-bet to be at after the action (not the increment).
-- If the action you choose isn't legal, your response will be coerced to a safe default (check or fold).
-- Be decisive. Output only the JSON.`;
+- If the action you choose isn't legal, it will be coerced to a safe default (check or fold).
+- Be decisive.
+- "reasoning" is ONE short sentence justifying your move — it gets shown in the table's Thinking log to other players and spectators. Talk about strategy, board texture, ranges, opponent tendencies — NEVER name your specific hole cards (no "4s3c", no "ace-king", no "my pair of jacks"). Stay in character and don't out your hand.`;
 
   const me = seats[seatIndex];
   const opponents = seats
     .filter((s) => s.seatIndex !== seatIndex && s.status !== "sitting_out")
-    .map((s) => `seat ${s.seatIndex + 1}: stack ${s.stack}, bet ${s.streetBet}, ${s.status}`)
+    .map(
+      (s) =>
+        `seat ${s.seatIndex + 1}: stack ${s.stack}, bet ${s.streetBet}, ${s.status}`,
+    )
     .join("\n");
 
   const legalLines = [
@@ -96,8 +133,11 @@ Rules:
     legal.canCheck && "check",
     legal.canCall && `call (${legal.callAmount} chips)`,
     legal.canBet && `bet (min ${legal.minRaiseTo}, max ${legal.maxRaiseTo})`,
-    legal.canRaise && `raise to (min ${legal.minRaiseTo}, max ${legal.maxRaiseTo})`,
-  ].filter(Boolean).join(", ");
+    legal.canRaise &&
+      `raise to (min ${legal.minRaiseTo}, max ${legal.maxRaiseTo})`,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
   const user = `Street: ${street} | Big blind: ${bigBlind} | Pot: ${pot}
 Board: ${community.join(" ") || "(none)"}
@@ -107,12 +147,13 @@ Current bet to match: ${currentBet}
 Opponents:
 ${opponents}
 
+Your notes from this session:
+${memoryText ?? "(none yet — first hand at this table)"}
+
 Recent action history (this hand):
 ${history.map((a) => `  seat ${a.seatIndex + 1} ${a.kind}${a.amount ? ` ${a.amount}` : ""} (${a.street})`).join("\n") || "  (none)"}
 
-Legal actions: ${legalLines}
-
-Respond with JSON only.`;
+Legal actions: ${legalLines}`;
 
   return { system, user };
 }
@@ -123,8 +164,13 @@ export const decide = action({
     apiKey: v.string(),
     timeoutMs: v.optional(v.number()),
   },
-  handler: async (ctx, { gameId, apiKey, timeoutMs }): Promise<{ status: "ok" | "skipped" | "error"; reason?: string }> => {
-    const seatCtx = await ctx.runQuery(internal.openrouter.seatContext, { gameId });
+  handler: async (
+    ctx,
+    { gameId, apiKey, timeoutMs },
+  ): Promise<{ status: "ok" | "skipped" | "error"; reason?: string }> => {
+    const seatCtx = await ctx.runQuery(internal.openrouter.seatContext, {
+      gameId,
+    });
     if (!seatCtx) return { status: "skipped", reason: "no seat to act" };
 
     const identity = await ctx.auth.getUserIdentity();
@@ -138,43 +184,56 @@ export const decide = action({
     const { system, user: userMsg } = buildPrompt(seatCtx);
     const startedAt = Date.now();
     let raw = "";
-    let action: ReturnType<typeof parseLLMAction>;
+    let reasoning: string | undefined;
+    let action: ReturnType<typeof coerceToLegal>;
+
+    // OpenRouter App Attribution — these headers make the call show up under
+    // PokerLM in the user's logs and count toward our app on the OpenRouter
+    // public leaderboard. Set SITE_URL in Convex env (`npx convex env set
+    // SITE_URL https://pokerlm.app`) to override the fallback.
+    // https://openrouter.ai/docs/app-attribution
+    const siteUrl =
+      process.env.SITE_URL ?? "https://github.com/Karnak19/pokerlm";
+    const openrouter = createOpenRouter({
+      apiKey,
+      headers: {
+        "HTTP-Referer": siteUrl,
+        "X-Title": "PokerLM",
+        "X-OpenRouter-Categories": "game",
+      },
+    });
+
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs ?? 15000);
-      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`,
-          "HTTP-Referer": "https://pokerlm.local",
-          "X-Title": "PokerLM",
-        },
-        body: JSON.stringify({
-          model: seatCtx.player.model,
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: userMsg },
-          ],
-          temperature: 0.7,
-          max_tokens: 200,
-          response_format: { type: "json_object" },
-        }),
-        signal: controller.signal,
+      const { output: decision } = await generateText({
+        model: openrouter.chat(seatCtx.player.model),
+        output: Output.object({ schema: ActionSchema }),
+        system,
+        prompt: userMsg,
+        temperature: 0.7,
+        abortSignal: controller.signal,
       });
       clearTimeout(timeout);
-      if (!res.ok) {
-        const errText = await res.text();
-        raw = `HTTP ${res.status}: ${errText.slice(0, 200)}`;
-        action = parseLLMAction("", seatCtx.legal as LegalActions);
-      } else {
-        const data: { choices?: { message?: { content?: string } }[] } = await res.json();
-        raw = data.choices?.[0]?.message?.content ?? "";
-        action = parseLLMAction(raw, seatCtx.legal as LegalActions);
-      }
+      raw = JSON.stringify(decision);
+      reasoning = decision.reasoning?.trim() || undefined;
+      action = coerceToLegal(
+        decision.action,
+        decision.amount,
+        seatCtx.legal as LegalActions,
+      );
     } catch (e) {
-      raw = `error: ${e instanceof Error ? e.message : String(e)}`;
-      action = parseLLMAction("", seatCtx.legal as LegalActions);
+      // Keep the full upstream error in server logs for debugging, but
+      // show a clean line in the hand log — players don't need to read
+      // OpenRouter typos. Falls through to a safe legal action below.
+      const detail = e instanceof Error ? e.message : String(e);
+      console.error("openrouter.decide failed:", detail);
+      action = coerceToLegal(
+        undefined,
+        undefined,
+        seatCtx.legal as LegalActions,
+      );
+      raw = `decision unavailable — defaulted to ${action.kind}`;
     }
 
     const thinkingMs = Date.now() - startedAt;
@@ -183,6 +242,242 @@ export const decide = action({
       action,
       thinkingMs,
       rawLLM: raw.slice(0, 4000),
+      reasoning: reasoning?.slice(0, 240),
+    });
+    return { status: "ok" };
+  },
+});
+
+const ActionSchema = z.object({
+  action: z.enum(["fold", "check", "call", "bet", "raise", "all_in"]),
+  amount: z
+    .number()
+    .int()
+    .optional()
+    .describe("Total street-bet target (only for bet/raise)"),
+  reasoning: z
+    .string()
+    .max(240)
+    .describe("One short sentence justifying the action. Shown in the Thinking log."),
+});
+
+// ---------- per-player opponent memory (reflect) ----------
+
+export const reflectContext = internalQuery({
+  args: { gameId: v.id("games"), playerId: v.id("players") },
+  handler: async (ctx, { gameId, playerId }) => {
+    const game = await ctx.db.get(gameId);
+    if (!game) return null;
+    if (game.status !== "complete") return null;
+    const finalState = JSON.parse(game.state) as GameState;
+
+    // The author's seat for this room. Memory scope = this seating.
+    const seat = await ctx.db
+      .query("seats")
+      .withIndex("by_room", (q) => q.eq("roomId", game.roomId))
+      .filter((q) => q.eq(q.field("playerId"), playerId))
+      .first();
+    if (!seat) return null;
+
+    const player = await ctx.db.get(playerId);
+    if (!player) return null;
+
+    const actions = await ctx.db
+      .query("actions")
+      .withIndex("by_game", (q) => q.eq("gameId", gameId))
+      .order("asc")
+      .collect();
+
+    const allSeats = await ctx.db
+      .query("seats")
+      .withIndex("by_room", (q) => q.eq("roomId", game.roomId))
+      .collect();
+    const opponents = await Promise.all(
+      allSeats
+        .filter((s) => s._id !== seat._id)
+        .map(async (s) => {
+          const p = await ctx.db.get(s.playerId);
+          return { seatIndex: s.seatIndex, name: p?.name ?? "(unknown)" };
+        }),
+    );
+
+    const memory = await ctx.db
+      .query("memories")
+      .withIndex("by_seat", (q) => q.eq("seatId", seat._id))
+      .first();
+
+    // finalState.seats[i].hole is non-null iff that seat reached showdown
+    // (folded seats are mutated to status "folded" but engine keeps hole).
+    // We expose hole only for non-folded seats — that mirrors a live table.
+    const reveals = finalState.seats
+      .filter((s) => s.hole && s.status !== "folded" && s.status !== "sitting_out")
+      .map((s) => ({ seatIndex: s.seatIndex, hole: s.hole! }));
+
+    return {
+      gameId,
+      roomId: game.roomId,
+      ownerUserId: seat.userId,
+      seatId: seat._id,
+      seatIndex: seat.seatIndex,
+      player: {
+        name: player.name,
+        model: player.model,
+        systemPrompt: player.systemPrompt,
+      },
+      ownHole: finalState.seats[seat.seatIndex]?.hole ?? null,
+      community: finalState.community,
+      pot: finalState.pot, // post-award this is 0; kept for reference
+      winners: finalState.winners ?? [],
+      reveals,
+      actions: actions.map((a) => ({
+        seatIndex: a.seatIndex,
+        street: a.street,
+        kind: a.kind,
+        amount: a.amount,
+      })),
+      opponents,
+      currentMemory: memory?.text ?? null,
+      hasMemory: !!memory,
+      memoryId: memory?._id ?? null,
+    };
+  },
+});
+
+export const upsertMemory = internalMutation({
+  args: {
+    memoryId: v.union(v.id("memories"), v.null()),
+    seatId: v.id("seats"),
+    playerId: v.id("players"),
+    text: v.string(),
+  },
+  handler: async (ctx, { memoryId, seatId, playerId, text }) => {
+    const now = Date.now();
+    const clipped = text.slice(0, 1000);
+    if (memoryId) {
+      await ctx.db.patch(memoryId, { text: clipped, updatedAt: now });
+    } else {
+      await ctx.db.insert("memories", {
+        seatId,
+        playerId,
+        text: clipped,
+        updatedAt: now,
+      });
+    }
+  },
+});
+
+const MemorySchema = z.object({ text: z.string().max(1000) });
+
+export const reflect = action({
+  args: {
+    gameId: v.id("games"),
+    playerId: v.id("players"),
+    apiKey: v.string(),
+  },
+  handler: async (
+    ctx,
+    { gameId, playerId, apiKey },
+  ): Promise<{ status: "ok" | "skipped" | "error"; reason?: string }> => {
+    const refl = await ctx.runQuery(internal.openrouter.reflectContext, {
+      gameId,
+      playerId,
+    });
+    if (!refl) return { status: "skipped", reason: "no context" };
+
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { status: "error", reason: "not authenticated" };
+    const user = await ctx.runQuery(api.users.me, {});
+    if (!user || user._id !== refl.ownerUserId) {
+      return { status: "error", reason: "not your seat" };
+    }
+
+    const transcript = refl.actions
+      .map(
+        (a) =>
+          `  seat ${a.seatIndex + 1} ${a.kind}${a.amount ? ` ${a.amount}` : ""} (${a.street})`,
+      )
+      .join("\n");
+    const opponentLines = refl.opponents
+      .map((o) => `  seat ${o.seatIndex + 1}: ${o.name}`)
+      .join("\n");
+    const revealLines = refl.reveals
+      .filter((r) => r.seatIndex !== refl.seatIndex)
+      .map((r) => `  seat ${r.seatIndex + 1}: ${r.hole.join(" ")}`)
+      .join("\n");
+    const winnerLines = refl.winners
+      .map((w) => `  seat ${w.seatIndex + 1} won ${w.amount}`)
+      .join("\n");
+
+    const system = `You are a Texas Hold'em player keeping a freeform note about the other players at this table.
+Strategy directive from the user: ${refl.player.systemPrompt}
+
+You just finished a hand. Decide whether to update your note. Call the update_memory tool ONLY if you want to change something; if your current notes are still accurate, do not call the tool.
+The tool REPLACES the entire note — write the full text you want to remember next time. ≤1000 chars.
+Notes should help you exploit opponent tendencies: who bluffs, who folds to pressure, who slow-plays, sizing tells. Be terse.`;
+
+    const userMsg = `Hand transcript (in order):
+${transcript || "  (no actions)"}
+
+Community cards: ${refl.community.join(" ") || "(none)"}
+Your hole cards: ${(refl.ownHole ?? []).join(" ") || "(none)"}
+
+Opponents at this table:
+${opponentLines || "  (none)"}
+
+Cards revealed at showdown:
+${revealLines || "  (none — everyone else folded pre-showdown)"}
+
+Winners:
+${winnerLines || "  (none)"}
+
+Your current notes (will be replaced if you call update_memory):
+${refl.currentMemory ?? "(none yet — first hand at this table)"}`;
+
+    const siteUrl =
+      process.env.SITE_URL ?? "https://github.com/Karnak19/pokerlm";
+    const openrouter = createOpenRouter({
+      apiKey,
+      headers: {
+        "HTTP-Referer": siteUrl,
+        "X-Title": "PokerLM",
+        "X-OpenRouter-Categories": "game",
+      },
+    });
+
+    let nextText: string | null = null;
+    try {
+      const result = await generateText({
+        model: openrouter.chat(refl.player.model),
+        system,
+        prompt: userMsg,
+        temperature: 0.5,
+        toolChoice: "auto",
+        tools: {
+          update_memory: tool({
+            description:
+              "Replace your memory note about the players at this table. The text you provide becomes your full memory; the previous text is discarded. ≤1000 chars.",
+            inputSchema: MemorySchema,
+          }),
+        },
+      });
+      const call = result.toolCalls?.find((c) => c.toolName === "update_memory");
+      if (call) {
+        const parsed = MemorySchema.safeParse(call.input);
+        if (parsed.success) nextText = parsed.data.text;
+      }
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      console.error("openrouter.reflect failed:", detail);
+      return { status: "error", reason: "llm call failed" };
+    }
+
+    if (nextText === null) return { status: "skipped", reason: "no tool call" };
+
+    await ctx.runMutation(internal.openrouter.upsertMemory, {
+      memoryId: refl.memoryId,
+      seatId: refl.seatId,
+      playerId,
+      text: nextText,
     });
     return { status: "ok" };
   },

@@ -1,9 +1,14 @@
 import { internalMutation } from "./_generated/server";
 import { applyAction, legalActions, type GameState } from "../src/engine/state";
 import { updateEloFromGame } from "./leaderboard";
+import { internal } from "./_generated/api";
 
-const STUCK_AFTER_MS = 60_000;       // 1 min
-const IDLE_ROOM_AFTER_MS = 24 * 3600 * 1000; // 24h
+// Matches games.ts — wait long enough for browser-side reflect calls to land.
+const AUTO_DEAL_DELAY_MS = 15000;
+
+const STUCK_AFTER_MS = 60_000;             // 1 min
+const EMPTY_ROOM_AFTER_MS = 60 * 60 * 1000;          // 1h — waiting room with zero seats
+const OCCUPIED_IDLE_ROOM_AFTER_MS = 24 * 3600 * 1000; // 24h — waiting room with seats but never started
 
 export const resolveStuckTurns = internalMutation({
   args: {},
@@ -58,27 +63,38 @@ export const resolveStuckTurns = internalMutation({
           if (!sid) continue;
           await ctx.db.patch(sid, { stack: next.seats[i].stack });
         }
-        const seats = await ctx.db
-          .query("seats")
-          .withIndex("by_room", (q) => q.eq("roomId", game.roomId))
-          .collect();
-        const playerBySeat = new Map(seats.map((s) => [s._id, s.playerId] as const));
-        await ctx.db.insert("handHistories", {
-          gameId: game._id,
-          roomId: game.roomId,
-          handNumber: game.handNumber,
-          winners: (next.winners ?? []).map((w) => {
-            const sid = game.seatIdByIndex[w.seatIndex]!;
-            return { seatId: sid, playerId: playerBySeat.get(sid)!, amount: w.amount };
-          }),
-          finalPot: next.winners?.reduce((a, w) => a + w.amount, 0) ?? 0,
-          replayBlob: JSON.stringify({ initialState: state, final: next }),
-          endedAt: now,
-        });
         await updateEloFromGame(ctx, game, next);
+        await ctx.scheduler.runAfter(AUTO_DEAL_DELAY_MS, internal.games.autoDealNext, {
+          roomId: game.roomId,
+        });
       }
 
       await ctx.db.patch(game.roomId, { lastActivityAt: now });
+    }
+  },
+});
+
+// Snapshot the current ELO of every alive player into `eloHistory`. Runs on
+// a 2h cron — the table is no longer written to per-hand, so this is the
+// sole source of rows for sparklines / movers / the editor side panel.
+// Retired players are skipped (their rating can no longer change).
+export const snapshotEloHistory = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const players = await ctx.db.query("players").collect();
+    for (const p of players) {
+      if ((p.status ?? "alive") !== "alive") continue;
+      const elo = await ctx.db
+        .query("elo")
+        .withIndex("by_player", (q) => q.eq("playerId", p._id))
+        .first();
+      if (!elo) continue;
+      await ctx.db.insert("eloHistory", {
+        playerId: p._id,
+        rating: elo.rating,
+        at: now,
+      });
     }
   },
 });
@@ -92,7 +108,13 @@ export const archiveIdleRooms = internalMutation({
       .withIndex("by_status", (q) => q.eq("status", "waiting"))
       .collect();
     for (const r of rooms) {
-      if (now - r.lastActivityAt > IDLE_ROOM_AFTER_MS) {
+      const idleFor = now - r.lastActivityAt;
+      const seats = await ctx.db
+        .query("seats")
+        .withIndex("by_room", (q) => q.eq("roomId", r._id))
+        .collect();
+      const threshold = seats.length === 0 ? EMPTY_ROOM_AFTER_MS : OCCUPIED_IDLE_ROOM_AFTER_MS;
+      if (idleFor > threshold) {
         await ctx.db.patch(r._id, { status: "finished" });
       }
     }

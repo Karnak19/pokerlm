@@ -15,6 +15,12 @@ export default defineSchema({
     model: v.string(),
     systemPrompt: v.string(),
     createdAt: v.number(),
+    // Persistent bankroll across sessions. The player buys in to a room
+    // from this pile and cashes out back into it on leave. When it hits 0
+    // and no other seats are held, the player is retired permanently.
+    bankroll: v.optional(v.number()),
+    status: v.optional(v.union(v.literal("alive"), v.literal("retired"))),
+    retiredAt: v.optional(v.number()),
   }).index("by_user", ["userId"]),
 
   rooms: defineTable({
@@ -45,6 +51,9 @@ export default defineSchema({
       v.literal("all_in"),
       v.literal("sitting_out"),
     ),
+    // Set when the player asks to leave after the current hand finishes;
+    // the seat is removed before the next deal.
+    leaveAfterHand: v.optional(v.boolean()),
   })
     .index("by_room", ["roomId"])
     .index("by_room_user", ["roomId", "userId"])
@@ -83,24 +92,11 @@ export default defineSchema({
     amount: v.number(),
     thinkingMs: v.optional(v.number()),
     rawLLM: v.optional(v.string()),
+    // Short 1-sentence justification the LLM emits alongside its action.
+    // Shown in the Thinking log. Absent on stuck-turn fallbacks / errors.
+    reasoning: v.optional(v.string()),
     at: v.number(),
   }).index("by_game", ["gameId"]),
-
-  handHistories: defineTable({
-    gameId: v.id("games"),
-    roomId: v.id("rooms"),
-    handNumber: v.number(),
-    winners: v.array(v.object({
-      seatId: v.id("seats"),
-      playerId: v.id("players"),
-      amount: v.number(),
-    })),
-    finalPot: v.number(),
-    replayBlob: v.string(),
-    endedAt: v.number(),
-  })
-    .index("by_room", ["roomId"])
-    .index("by_game", ["gameId"]),
 
   elo: defineTable({
     playerId: v.id("players"),
@@ -109,4 +105,31 @@ export default defineSchema({
     wins: v.number(),
     updatedAt: v.number(),
   }).index("by_player", ["playerId"]),
+
+  // Per-seat freeform memory the LLM writes via the `reflect` action at the
+  // end of each hand. Scope = this seating at this room; deleted in
+  // cashOutSeat when the seat is removed.
+  memories: defineTable({
+    seatId: v.id("seats"),
+    playerId: v.id("players"),
+    text: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("by_seat", ["seatId"])
+    .index("by_player", ["playerId"]),
+
+  // Periodic ELO snapshot — one row per alive player every 2h via the
+  // `snapshotEloHistory` cron. Drives sparklines, the leaderboard "Big
+  // movers" panel, and the /roster editor side panel. Indexed by player +
+  // time for cheap range scans. `gameId` and `delta` are legacy fields kept
+  // optional so pre-cron rows (one per hand) remain valid.
+  eloHistory: defineTable({
+    playerId: v.id("players"),
+    gameId: v.optional(v.id("games")),
+    rating: v.number(),
+    delta: v.optional(v.number()),
+    at: v.number(),
+  })
+    .index("by_player", ["playerId"])
+    .index("by_player_at", ["playerId", "at"]),
 });

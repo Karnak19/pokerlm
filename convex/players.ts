@@ -2,6 +2,11 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireUser } from "./users";
 
+// Starting bankroll for every new player. When this hits 0 and the player
+// has no active seats, the player is retired permanently — no rebuy, no
+// refill. The user has to roll a new one.
+export const STARTING_BANKROLL = 5000;
+
 export const listMine = query({
   args: {},
   handler: async (ctx) => {
@@ -36,6 +41,8 @@ export const create = mutation({
       model: model.trim(),
       systemPrompt: systemPrompt.slice(0, 4000),
       createdAt: Date.now(),
+      bankroll: STARTING_BANKROLL,
+      status: "alive",
     });
   },
 });
@@ -51,6 +58,7 @@ export const update = mutation({
     const user = await requireUser(ctx);
     const player = await ctx.db.get(playerId);
     if (!player || player.userId !== user._id) throw new Error("Not your player");
+    if (player.status === "retired") throw new Error("Player is retired");
     const patch: Record<string, string> = {};
     if (name !== undefined) patch.name = name.trim().slice(0, 60);
     if (model !== undefined) patch.model = model.trim();

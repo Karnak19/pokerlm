@@ -1,102 +1,114 @@
 # 🃏 PokerLM
 
-**Texas Hold'em poker where AI models compete against each other.**
+**Texas Hold'em where AI models compete against each other.**
 
-Bring your OpenRouter API key, pick any model, write your strategy as a system prompt, and watch your LLM bluff, raise, and fold its way to glory.
+Bring your OpenRouter API key, pick any model, write your strategy as a system prompt, and watch your LLM bluff, raise, and fold its way through a real bankroll.
 
-> *"J'ai battu GPT-4o avec DeepSeek-R1 en lui disant juste 'Tu es un shark du Bellagio, bluffe tout le temps'"*
+> *"J'ai battu GPT-5 avec DeepSeek V4 en lui disant juste 'Tu es un shark du Bellagio, bluffe tout le temps'"*
 
 ---
 
-## How It Works
+## How it works
 
-1. **Create players** — each player is a **model + system prompt** combo. You can have as many as you want.
-   - Pick any model on [OpenRouter](https://openrouter.ai/) (GPT-4o, Claude, Llama 3, DeepSeek, Mistral, etc.)
-   - Write a custom system prompt defining the strategy ("You are an aggressive bluffer", "Only play pocket pairs", "Tight-aggressive, never bluff pre-flop"…)
-   - Give it a name — *"Shark du Bellagio"*, *"Fold Everything"*, *"All-in or Nothing"*…
-2. **Join or create a room** — pick which player enters the table
-3. **Play** — sit back and watch your AI battle it out at the table
-4. **Climb the leaderboard** — ELO ratings per player, win rates, and replayable hand histories
+1. **Create players** — each player is a `model + system prompt` combo. Pick any model on [OpenRouter](https://openrouter.ai/) (Opus 4.7, Sonnet 4.6, Haiku 4.5, GPT-5, Gemini 3 Flash, DeepSeek V4, Llama 4 …), write the strategy, give it a name.
+2. **Sit at a table** — the buy-in is deducted from the player's bankroll.
+3. **Watch the bots play** — auto-deal, animated card deals, chip-fly to pot, live thinking timer per seat.
+4. **Climb the ELO leaderboard, grow the bankroll** — or bust out. Permanently.
 
-The more expensive the model, the better it *might* play — but a clever system prompt on a cheap model can surprise everyone.
+The expensive models *might* play better. A clever prompt on a cheap model usually beats a sloppy prompt on a flagship one.
 
-## V1 Scope
+## The bankroll game
 
-- **User accounts** — create and manage multiple players, track personal stats
-- **No real money** — pure fun, virtual chips only
-- **Texas Hold'em** (full rules: blinds, pre-flop, flop, turn, river, showdown)
-- **2-6 players per table**
-- **Leaderboard** ranked by player (ELO)
-- **Hand history replay** — watch back any game
+Each player starts with **$5,000**. Sit at a table, you bring the buy-in; leave with whatever you have left. When a player's bankroll hits **$0** — **they're retired permanently**. No rebuy. No daily faucet. The user has to roll a new player. ELO is independent of bankroll: a retired player keeps their rating on the leaderboard as a tombstone.
+
+## Why OpenRouter only?
+
+We support OpenRouter exclusively because it's the only LLM gateway with first-class **throwaway keys with hard spend caps**. With direct Anthropic / OpenAI / Google keys, one leaked key could drain your account. With a capped OpenRouter key, the worst case is whatever you set the cap to.
+
+Mint a $5 key on OpenRouter, paste it in the nav chip, sit at a cheap table. The key never leaves your browser — it lives in `sessionStorage`, never our database. See `/how-it-works` for the full details.
+
+## Routes
+
+| Route | Notes |
+|---|---|
+| `/` | Hero + live aggregate stats + mini leaderboard. Server-rendered, cached "minutes". |
+| `/how-it-works` | Key handling, OpenRouter-only rationale, pricing, data flow. Cached "hours". |
+| `/leaderboard` | Podium, ranking table (with bankroll column + retired tombstones), big movers, model meta. RSC + client island. |
+| `/roster` | Your players. Bankroll prominently displayed. Editor with real ELO history chart. |
+| `/rooms` | Joinable tables. Sit button is gated by bankroll. |
+| `/rooms/new` | Three fields: name, seats, stakes. |
+| `/rooms/[id]` | The felt — animated card deals, chip-to-pot, live thinking timer, leave-mid-hand / leave-after-hand dialog. |
 
 ## Architecture
 
 ```
 pokerlm/
-├── convex/                # Convex backend — schema, queries, mutations, actions, cron
-│   ├── schema.ts          # Database schema (users, players, rooms, games, hands, leaderboard)
-│   ├── users.ts           # User CRUD + auth
-│   ├── players.ts         # Player CRUD (model + prompt combos)
-│   ├── rooms.ts           # Room management + matchmaking
-│   ├── games.ts           # Game engine — Texas Hold'em rules, hand evaluation, betting
-│   ├── openrouter.ts      # LLM calls to OpenRouter via Convex actions
-│   ├── leaderboard.ts     # ELO calculations + rankings
-│   └── crons.ts           # Scheduled tasks (timeouts, cleanup)
-├── src/                   # Next.js frontend — poker table UI, rooms, leaderboard
-├── README.md
-├── package.json
-└── convex.json
+├── convex/                # Convex backend
+│   ├── schema.ts          # users, players, rooms, seats, games, actions, elo, eloHistory
+│   ├── users.ts
+│   ├── players.ts         # bankroll lives here
+│   ├── rooms.ts           # sit, leave (mid-hand or queued), cashOutSeat helper
+│   ├── games.ts           # submitAction, dealHand, autoDealNext (scheduler)
+│   ├── openrouter.ts      # `decide` action — LLM call → submitAction
+│   ├── leaderboard.ts     # top, aggregate, mine, history, historyMany, movers
+│   ├── maintenance.ts     # stuck-turn + idle-room crons
+│   └── crons.ts
+├── src/
+│   ├── app/               # Next.js routes (cacheComponents enabled)
+│   ├── components/
+│   │   ├── site-shell.tsx           # nav + footer (OpenRouter key chip lives here)
+│   │   ├── player-avatar.tsx        # DiceBear bottts, seeded by player _id
+│   │   ├── rating-sparkline.tsx     # tiny Recharts line
+│   │   ├── rating-chart.tsx         # bigger Recharts area chart
+│   │   ├── model-combobox.tsx       # shadcn Command picker w/ live OpenRouter pricing
+│   │   └── ui/                      # shadcn primitives
+│   ├── engine/                      # pure-TS Hold'em engine
+│   └── lib/models.ts                # curated model list + price helpers
+└── AGENTS.md              # rules of the road for AI sessions; read this first
 ```
 
-- **Frontend:** Next.js, reactive updates via Convex queries (realtime by default)
-- **Backend:** Convex — reactive database, server functions (queries/mutations/actions), cron, auth
-- **Game Engine:** Pure TypeScript — hand evaluation, betting rounds, pot management
-- **OpenRouter Integration:** Users' API keys are used **in-memory only**, never stored. Users are encouraged to create [restricted keys](https://openrouter.ai/docs/api-keys) with spending limits.
+## Tech stack
 
-## Design Decisions
+| Layer | Choice |
+|---|---|
+| Runtime | Bun |
+| Frontend | Next.js 16 (Cache Components on, `"use cache"` directive) |
+| Backend | Convex (reactive db + scheduler) |
+| Auth | Clerk |
+| LLM gateway | OpenRouter (exclusive — see "Why OpenRouter only?") |
+| UI | Tailwind v4 + shadcn |
+| Charts | shadcn `chart` (Recharts) |
+| Animation | framer-motion |
+| Avatars | DiceBear `bottts` |
 
-### API Key Handling
-- Users provide their **own** OpenRouter API key
-- Keys are held in memory for the session duration only — **never persisted**
-- OpenRouter supports creating [throwaway keys with quotas](https://openrouter.ai/docs/api-keys), so users can limit their exposure
-- Cost is the user's responsibility — bigger model = potentially smarter plays, but costs more per decision
+## Key invariants
 
-### LLM Output Parsing
-- Each model receives the game state (its cards, community cards, pot, opponent actions) and must respond with a structured action (fold / check / call / raise + amount)
-- A robust parser handles messy outputs — timeouts and invalid responses default to **check** (or **fold** if facing a bet)
+- **One seat per user per room** — anti-multi-account at the same table.
+- **Bankroll cash-out on every seat removal** — see `cashOutSeat` in `convex/rooms.ts`. Never delete a seat without it.
+- **ELO fires on every completed hand**, not just showdowns. Winner-based pairwise comparison.
+- **Permanent bust** — bankroll → 0 with no other seats → retired. No mechanism to un-retire.
+- **OpenRouter key never persisted** — `sessionStorage` only, scoped to the browser tab.
+- **Auto-deal** — every hand finalization schedules the next hand +3s via the Convex scheduler.
 
-### Model Fairness
-- All players at a table make their decision simultaneously (parallel API calls)
-- A per-player timeout prevents slow models from stalling the game
-- "Thinking time" is displayed as a fun stat
+## Local setup
 
-## Tech Stack
+```bash
+bun install
+npx convex dev          # one terminal — local Convex deployment
+bun dev                 # another terminal — Next.js
+```
 
-| Layer      | Choice              |
-|------------|---------------------|
-| Runtime    | Bun                 |
-| Frontend   | Next.js             |
-| Backend    | Convex              |
-| Realtime   | Convex reactive queries |
-| LLM Calls  | OpenRouter API (via Convex actions) |
-| Database   | Convex (built-in)    |
-| Hosting    | TBD                  |
+Set in `.env.local`:
+- `NEXT_PUBLIC_CONVEX_URL` — auto-populated by `npx convex dev`
+- Clerk publishable + secret keys
 
-## Roadmap
-
-- [ ] V1: User accounts (auth, player CRUD, personal stats)
-- [ ] V1: Core game engine (Texas Hold'em rules, hand evaluation)
-- [ ] V1: OpenRouter integration (parallel LLM calls per player)
-- [ ] V1: Basic frontend (create room, join, watch)
-- [ ] V1: Leaderboard (ELO per player)
-- [ ] V1: Hand history replay
-- [ ] V2: Tournament mode
-- [ ] V2: Spectator mode with chat
-- [ ] V3: ???
+Set in Convex env (`npx convex env set …`):
+- `SITE_URL` — for OpenRouter App Attribution. Defaults to the GitHub repo URL.
+- Clerk JWT issuer domain (if using auth)
 
 ## Contributing
 
-PRs welcome. This is a fun side project — keep it fun.
+PRs welcome. Read `AGENTS.md` first — it documents decisions earlier sessions made (style stance, OpenRouter-only, no replays, no rebuys, etc.) so you don't accidentally undo them.
 
 ## License
 

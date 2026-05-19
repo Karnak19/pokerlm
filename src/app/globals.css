@@ -8,21 +8,8 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
+  --font-mono: var(--font-mono);
+  --font-heading: var(--font-serif);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -39,6 +26,16 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+
+  /* Brand extensions */
+  --color-felt: var(--felt);
+  --color-felt-rail: var(--felt-rail);
+  --color-chip: var(--chip);
+  --color-chip-ink: var(--chip-ink);
+  --color-suit-red: var(--suit-red);
+  --color-paper: var(--paper);
+  --color-paper-ink: var(--paper-ink);
+
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -48,83 +45,156 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+/* PokerLM tokens — dark canonical (also active at :root since the app is dark-first) */
+:root, .dark {
+  --background: oklch(0.165 0.018 155);
+  --foreground: oklch(0.955 0.012 85);
+  --card: oklch(0.215 0.020 155);
+  --card-foreground: oklch(0.955 0.012 85);
+  --popover: oklch(0.215 0.020 155);
+  --popover-foreground: oklch(0.955 0.012 85);
+  --primary: oklch(0.76 0.135 145);
+  --primary-foreground: oklch(0.14 0.020 155);
+  --secondary: oklch(0.265 0.022 155);
+  --secondary-foreground: oklch(0.955 0.012 85);
+  --muted: oklch(0.245 0.018 155);
+  --muted-foreground: oklch(0.66 0.018 85);
+  --accent: oklch(0.28 0.024 155);
+  --accent-foreground: oklch(0.955 0.012 85);
+  --destructive: oklch(0.66 0.215 25);
+  --destructive-foreground: oklch(0.99 0 0);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.60 0.08 145);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --felt:       oklch(0.21 0.038 155);
+  --felt-rail:  oklch(0.31 0.045 145);
+  --chip:       oklch(0.78 0.13 70);
+  --chip-ink:   oklch(0.20 0.02 155);
+  --suit-red:   oklch(0.66 0.22 25);
+  --paper:      oklch(0.96 0.012 85);
+  --paper-ink:  oklch(0.14 0.020 155);
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
+  *, *::before, *::after { box-sizing: border-box; }
+  html {
+    font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
   body {
-    @apply bg-background text-foreground;
+    background: var(--background);
+    color: var(--foreground);
+    background-image:
+      radial-gradient(ellipse 90% 60% at 50% -10%, color-mix(in oklch, var(--primary) 9%, transparent), transparent 60%),
+      radial-gradient(ellipse 80% 60% at 50% 110%, color-mix(in oklch, var(--primary) 5%, transparent), transparent 60%);
+    background-attachment: fixed;
+    min-height: 100vh;
+    font-feature-settings: "tnum" off;
+    letter-spacing: -0.005em;
   }
-  html {
-    @apply font-sans;
+  ::selection { background: color-mix(in oklch, var(--primary) 35%, transparent); color: var(--foreground); }
+}
+
+/* ────────────────────────────────────────────────────────────
+   Bespoke art primitives.
+   Tailwind can't compose these (multi-layer radial gradients,
+   stacked inset-shadow chip discs, paper card faces with
+   suit-colored pips). Keep this list small.
+   ──────────────────────────────────────────────────────────── */
+@layer components {
+  /* Avatar disc with felt fill + primary rim (used in nav, seats, leaderboard rows). */
+  .pl-av {
+    border-radius: 50%;
+    background:
+      radial-gradient(circle at 30% 25%, color-mix(in oklch, white 12%, transparent), transparent 60%),
+      var(--felt);
+    border: 1px solid color-mix(in oklch, var(--primary) 25%, transparent);
+    display: grid; place-items: center;
+    color: var(--primary);
+    font-family: var(--font-serif), serif;
+    letter-spacing: -0.02em;
   }
+
+  /* Felt surface — the live game canvas and decorative hero stages. */
+  .pl-felt {
+    background:
+      radial-gradient(120% 80% at 30% -10%, color-mix(in oklch, white 6%, transparent), transparent 60%),
+      radial-gradient(80% 80% at 50% 110%, color-mix(in oklch, var(--primary) 18%, transparent), transparent 60%),
+      var(--felt);
+    border: 1px solid color-mix(in oklch, var(--primary) 28%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in oklch, white 5%, transparent),
+      0 24px 40px -24px color-mix(in oklch, black 80%, transparent);
+  }
+
+  /* Poker chip disc — used in chip-stacks, podium gold-pile, decorative art. */
+  .pl-chip {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background:
+      repeating-conic-gradient(from 0deg, var(--chip) 0deg 30deg, transparent 30deg 60deg),
+      var(--chip-ink);
+    display: grid; place-items: center;
+    position: relative;
+    box-shadow:
+      inset 0 0 0 2px var(--chip-ink),
+      inset 0 0 0 3px var(--chip),
+      inset 0 0 0 7px var(--chip-ink),
+      0 4px 8px -3px color-mix(in oklch, black 60%, transparent);
+  }
+  .pl-chip::before {
+    content: ""; position: absolute; inset: 6px;
+    border-radius: 50%;
+    background: var(--chip);
+    box-shadow: inset 0 0 0 1px color-mix(in oklch, black 25%, transparent);
+  }
+
+  /* Paper card face — the .red/.black modifiers color suit pips. */
+  .pl-card {
+    aspect-ratio: 2 / 3;
+    background: var(--paper);
+    color: var(--paper-ink);
+    border: 1px solid color-mix(in oklch, black 18%, transparent);
+    position: relative;
+    font-family: var(--font-serif), serif;
+    box-shadow:
+      inset 0 0 0 1px color-mix(in oklch, white 60%, transparent),
+      0 10px 22px -14px color-mix(in oklch, black 80%, transparent);
+  }
+  .pl-card[data-suit="red"] { color: var(--suit-red); }
+  .pl-card[data-suit="black"] { color: var(--paper-ink); }
+
+  /* Card back — felt-tinted, primary-rimmed. */
+  .pl-card-back {
+    aspect-ratio: 2 / 3;
+    background:
+      radial-gradient(circle at 50% 50%, color-mix(in oklch, var(--primary) 35%, transparent), transparent 60%),
+      repeating-linear-gradient(45deg, color-mix(in oklch, white 4%, transparent) 0 5px, transparent 5px 10px),
+      var(--felt);
+    border: 1px solid color-mix(in oklch, var(--primary) 35%, transparent);
+    position: relative;
+    box-shadow:
+      inset 0 0 0 3px color-mix(in oklch, var(--background) 60%, transparent),
+      inset 0 0 0 4px color-mix(in oklch, var(--primary) 40%, transparent);
+  }
+  .pl-card-back::after {
+    content: ""; position: absolute; inset: 32%;
+    border-radius: 50%;
+    background: var(--felt);
+    border: 1px solid color-mix(in oklch, var(--primary) 50%, transparent);
+  }
+}
+
+/* Tabular numerals utility — compose with `font-mono tabular-nums` in JSX
+   when you want both digits aligned AND the IBM Plex Mono face. */
+@utility tnum {
+  font-feature-settings: "tnum";
+}
+
+@keyframes pl-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.35; }
 }

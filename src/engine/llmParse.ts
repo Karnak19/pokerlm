@@ -47,6 +47,10 @@ export function parseLLMAction(raw: string, legal: LegalActions): Action {
   return action;
 }
 
+export function coerceToLegal(kind: string | undefined, amount: number | undefined, legal: LegalActions): Action {
+  return coerce(kind, amount, legal);
+}
+
 function coerce(kind: string | undefined, amount: number | undefined, legal: LegalActions): Action {
   const safeDefault: Action = legal.canCheck ? { kind: "check" } : { kind: "fold" };
 
