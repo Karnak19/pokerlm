@@ -242,7 +242,7 @@ export default function RoomsPage() {
                       </div>
                     </div>
                   </CardContent>
-                  <CardFooter className="-mx-5.5 -mb-5.5 mt-1 flex items-center justify-between gap-3 border-t border-border bg-transparent px-5.5 py-4">
+                  <CardFooter className="-mx-5.5 mt-1 flex items-center justify-between gap-3 border-t border-border bg-transparent px-5.5 py-4">
                     <div className="flex flex-wrap gap-1">
                       <span className="rounded-full border border-border bg-input/20 px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
                         mixed models
