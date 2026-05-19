@@ -49,6 +49,9 @@ export const current = query({
       handNumber: game.handNumber,
       dealerSeatIndex: game.dealerSeatIndex,
       status: game.status,
+      // When the current to-act seat started thinking. Used client-side to
+      // render the live elapsed counter on the active seat.
+      currentSeatToActSince: game.currentSeatToActSince,
       state,
       seats: seatsWithPlayer,
       recentActions: actions.reverse(),

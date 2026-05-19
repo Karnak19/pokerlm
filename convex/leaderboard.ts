@@ -1,8 +1,6 @@
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { evaluateBest } from "../src/engine/handEval";
 import type { GameState } from "../src/engine/state";
-import type { Card } from "../src/engine/cards";
 import type { Id } from "./_generated/dataModel";
 
 const DEFAULT_RATING = 1500;
@@ -17,17 +15,22 @@ export async function updateEloFromGame(
   game: { _id: Id<"games">; seatIdByIndex: Array<Id<"seats"> | null> },
   finalState: GameState,
 ) {
-  // Seats that reached showdown = active or all_in with hole cards still set.
-  const showdown = finalState.seats.filter(
-    (s) => (s.status === "active" || s.status === "all_in") && s.hole && s.totalContributed > 0,
-  );
-  if (showdown.length < 2) return;
+  // Every seat that put chips in the pot is in the running, even if they
+  // folded — scoring uses the winners list, not hand evaluation, so a
+  // pre-showdown fold counts as a loss against whoever took the pot.
+  const contributors = finalState.seats.filter((s) => s.totalContributed > 0);
+  if (contributors.length < 2) return;
 
   const winners = new Set((finalState.winners ?? []).map((w) => w.seatIndex));
+  if (winners.size === 0) return;
 
   // Resolve playerIds and current ratings
-  const entries: { seatIndex: number; playerId: Id<"players">; ratingDoc: { _id: Id<"elo">; rating: number; gamesPlayed: number; wins: number } | null; hand: ReturnType<typeof evaluateBest> }[] = [];
-  for (const s of showdown) {
+  const entries: {
+    seatIndex: number;
+    playerId: Id<"players">;
+    ratingDoc: { _id: Id<"elo">; rating: number; gamesPlayed: number; wins: number } | null;
+  }[] = [];
+  for (const s of contributors) {
     const seatId = game.seatIdByIndex[s.seatIndex];
     if (!seatId) continue;
     const seat = await ctx.db.get(seatId);
@@ -36,21 +39,26 @@ export async function updateEloFromGame(
       .query("elo")
       .withIndex("by_player", (q) => q.eq("playerId", seat.playerId))
       .first();
-    const hand = evaluateBest([...(s.hole as Card[]), ...(finalState.community as Card[])]);
-    entries.push({ seatIndex: s.seatIndex, playerId: seat.playerId, ratingDoc, hand });
+    entries.push({ seatIndex: s.seatIndex, playerId: seat.playerId, ratingDoc });
   }
 
-  // Pairwise updates
+  // Pairwise updates scored by winners set:
+  //   both winners       → tie (split pot)
+  //   only one a winner  → that side wins
+  //   neither a winner   → no-op (shouldn't happen if winners.size > 0)
   const deltas = new Map<Id<"players">, number>();
   for (let i = 0; i < entries.length; i++) {
     for (let j = i + 1; j < entries.length; j++) {
       const a = entries[i], b = entries[j];
+      const aWon = winners.has(a.seatIndex);
+      const bWon = winners.has(b.seatIndex);
+      let sa: number, sb: number;
+      if (aWon && bWon) { sa = 0.5; sb = 0.5; }
+      else if (aWon) { sa = 1; sb = 0; }
+      else if (bWon) { sa = 0; sb = 1; }
+      else continue;
       const ra = a.ratingDoc?.rating ?? DEFAULT_RATING;
       const rb = b.ratingDoc?.rating ?? DEFAULT_RATING;
-      let sa: number, sb: number;
-      if (a.hand.score > b.hand.score) { sa = 1; sb = 0; }
-      else if (a.hand.score < b.hand.score) { sa = 0; sb = 1; }
-      else { sa = 0.5; sb = 0.5; }
       const ea = expected(ra, rb);
       const eb = 1 - ea;
       deltas.set(a.playerId, (deltas.get(a.playerId) ?? 0) + K * (sa - ea));

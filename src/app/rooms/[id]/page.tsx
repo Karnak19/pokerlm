@@ -165,6 +165,24 @@ export default function RoomPage() {
   const [selectedPlayer, setSelectedPlayer] = useState<Id<"players"> | "">("");
   const [sitError, setSitError] = useState<string | null>(null);
 
+  // Tick a clock client-side so the elapsed counter on the active seat
+  // updates smoothly without waking up the whole tree per ms. Refreshes
+  // every 150ms while a seat is to act.
+  const [elapsedMs, setElapsedMs] = useState(0);
+  /* eslint-disable react-hooks/set-state-in-effect -- ticking client-only clock */
+  useEffect(() => {
+    const since = game?.currentSeatToActSince;
+    if (!since || game?.status !== "in_progress") {
+      setElapsedMs(0);
+      return;
+    }
+    const tick = () => setElapsedMs(Date.now() - since);
+    tick();
+    const id = setInterval(tick, 150);
+    return () => clearInterval(id);
+  }, [game?.currentSeatToActSince, game?.status]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   async function trySit(playerId: Id<"players">) {
     setSitError(null);
     try {
@@ -467,10 +485,12 @@ export default function RoomPage() {
                   const folded = sState?.status === "folded";
                   const showHole = !!(sState?.hole && (isYou || game?.status === "complete"));
                   const initial = (seat?.player?.name || "?").trim().charAt(0).toUpperCase();
+                  // Live elapsed counter while this seat is to act.
+                  const elapsedLabel = isToAct ? `${(elapsedMs / 1000).toFixed(1)}s` : "";
                   const tagText = folded
                     ? "folded"
                     : isToAct
-                    ? "thinking…"
+                    ? elapsedLabel
                     : sState?.status === "all_in"
                     ? "all-in"
                     : dealerIndex === idx
@@ -516,15 +536,20 @@ export default function RoomPage() {
                     );
                   }
 
+                  const anyoneActing =
+                    toActSeatIndex !== null && toActSeatIndex !== undefined;
+                  // Dim non-active seats so the table reads as "this one's turn".
+                  const dimmed = anyoneActing && !isToAct && !folded;
                   return (
                     <div
                       key={idx}
                       className={cn(
-                        "absolute grid min-w-[180px] max-w-[220px] grid-cols-[44px_1fr] items-center gap-2.5 rounded-[14px] border bg-background/60 px-3 py-2.5 backdrop-blur-sm",
+                        "absolute grid min-w-[180px] max-w-[220px] grid-cols-[44px_1fr] items-center gap-2.5 rounded-[14px] border bg-background/60 px-3 py-2.5 backdrop-blur-sm transition-opacity duration-300",
                         "border-white/10",
                         isToAct && "border-primary/60 shadow-[0_0_0_1px_color-mix(in_oklch,var(--primary)_30%,transparent),0_0_28px_-4px_color-mix(in_oklch,var(--primary)_50%,transparent)]",
                         isYou && !isToAct && "border-chip/50 shadow-[0_0_0_1px_color-mix(in_oklch,var(--chip)_25%,transparent),0_0_22px_-8px_color-mix(in_oklch,var(--chip)_40%,transparent)]",
                         folded && "opacity-50",
+                        dimmed && "opacity-70",
                       )}
                       style={SEAT_STYLE[pos]}
                     >
@@ -541,11 +566,25 @@ export default function RoomPage() {
                           transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
                         />
                       )}
-                      <PlayerAvatar
-                        seed={seat.playerId}
-                        fallback={initial}
-                        size={44}
-                      />
+                      {isToAct && !folded ? (
+                        <motion.div
+                          animate={{ scale: [1, 1.05, 1] }}
+                          transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+                          className="grid place-items-center"
+                        >
+                          <PlayerAvatar
+                            seed={seat.playerId}
+                            fallback={initial}
+                            size={44}
+                          />
+                        </motion.div>
+                      ) : (
+                        <PlayerAvatar
+                          seed={seat.playerId}
+                          fallback={initial}
+                          size={44}
+                        />
+                      )}
                       <div className="grid min-w-0 gap-0.5">
                         <span className="truncate text-[13.5px] text-white/95">
                           {seat.player?.name ?? "?"}
@@ -773,7 +812,9 @@ export default function RoomPage() {
                         />
                         {toActSeat.player?.name}
                       </span>
-                      <span className="font-mono text-[10.5px] text-muted-foreground">acting now</span>
+                      <span className="font-mono tabular-nums text-[10.5px] text-primary">
+                        {(elapsedMs / 1000).toFixed(1)}s
+                      </span>
                     </div>
                     <div className="flex items-center justify-between font-mono text-[11px]">
                       <span className="text-primary">deciding…</span>
@@ -855,6 +896,9 @@ export default function RoomPage() {
                   {toActSeat.player?.name ?? "Seat " + toActSeatIndex}
                 </em>{" "}
                 is thinking
+              </span>
+              <span className="font-mono tabular-nums text-[11px] text-primary">
+                {(elapsedMs / 1000).toFixed(1)}s
               </span>
               <span className="font-mono text-[11px] tabular-nums text-muted-foreground/70">
                 · {toActSeat.player?.model ?? "—"}
