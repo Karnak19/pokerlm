@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Newsreader, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import Script from "next/script";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 
@@ -40,6 +41,11 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <Providers>{children}</Providers>
+        <Script
+          defer
+          src="https://assets.onedollarstats.com/stonks.js"
+          strategy="afterInteractive"
+        />
       </body>
     </html>
   );
