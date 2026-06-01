@@ -1,6 +1,6 @@
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { requireUser } from "./users";
+import { requireUser, requireUserReadOnly } from "./users";
 import { applyAction, startHand, type GameState } from "../src/engine/state";
 import { internal } from "./_generated/api";
 import type { Id, Doc } from "./_generated/dataModel";
@@ -68,6 +68,30 @@ export const listOpen = query({
         return { ...r, seatsTaken: seats.length };
       }),
     );
+  },
+});
+
+// Every seat the current user holds, across all rooms, with the room and
+// player joined on. Powers the navbar "active seats" affordance so a stranded
+// player can always leave from any page. Returns [] when signed out.
+export const mySeats = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUserReadOnly(ctx);
+    if (!user) return [];
+    const seats = await ctx.db
+      .query("seats")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const rows = await Promise.all(
+      seats.map(async (seat) => {
+        const room = await ctx.db.get(seat.roomId);
+        const player = await ctx.db.get(seat.playerId);
+        return { seat, room, player };
+      }),
+    );
+    // Drop any seats whose room or player no longer exists.
+    return rows.filter((r) => r.room !== null && r.player !== null);
   },
 });
 

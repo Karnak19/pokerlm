@@ -57,7 +57,8 @@ export default defineSchema({
   })
     .index("by_room", ["roomId"])
     .index("by_room_user", ["roomId", "userId"])
-    .index("by_room_seat", ["roomId", "seatIndex"]),
+    .index("by_room_seat", ["roomId", "seatIndex"])
+    .index("by_user", ["userId"]),
 
   games: defineTable({
     roomId: v.id("rooms"),
