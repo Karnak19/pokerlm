@@ -42,12 +42,16 @@ export default function RoomsPage() {
   const [search, setSearch] = useState("");
 
   // Highest bankroll across all alive players — used to gate the Sit
-  // button on each room card. If none of the user's players can afford a
-  // table's buy-in, the button is disabled.
+  // button on each room card. Three distinct states:
+  //   undefined → players query still loading
+  //   null      → user has no alive players at all → offer "Create a player"
+  //   number    → richest alive player's bankroll → gate Sit by buy-in
+  // The null/0 split matters: 0 means "broke" (real "$X richest player"
+  // copy), null means "nothing to seat yet" (don't show a misleading $0).
   const maxAliveBankroll = useMemo(() => {
-    if (!myPlayers) return null;
+    if (!myPlayers) return undefined;
     const alive = myPlayers.filter((p: Doc<"players">) => p.status !== "retired");
-    if (alive.length === 0) return 0;
+    if (alive.length === 0) return null;
     return Math.max(...alive.map((p) => p.bankroll ?? 5000));
   }, [myPlayers]);
 
@@ -156,6 +160,13 @@ export default function RoomsPage() {
                     full ? "opacity-75" : ""
                   }`}
                 >
+                  {/* The whole header+body is the spectate affordance — every
+                      room is reachable regardless of sit eligibility. */}
+                  <Link
+                    href={`/rooms/${r._id}`}
+                    className="grid gap-4 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={`Open ${r.name} table`}
+                  >
                   <CardHeader className="flex flex-row items-start justify-between gap-3 px-0">
                     <div>
                       <h3 className="font-heading text-2xl font-normal leading-tight tracking-tight">
@@ -242,12 +253,14 @@ export default function RoomsPage() {
                       </div>
                     </div>
                   </CardContent>
+                  </Link>
                   <CardFooter className="-mx-5.5 mt-1 flex items-center justify-between gap-3 border-t border-border bg-transparent px-5.5 py-4">
-                    <div className="flex flex-wrap gap-1">
-                      <span className="rounded-full border border-border bg-input/20 px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
-                        mixed models
-                      </span>
-                    </div>
+                    <Link
+                      href={`/rooms/${r._id}`}
+                      className="font-mono text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    >
+                      {full ? "Spectate →" : "Open table →"}
+                    </Link>
                     {full ? (
                       <Button
                         variant="outline"
@@ -257,7 +270,11 @@ export default function RoomsPage() {
                       >
                         Waitlist
                       </Button>
-                    ) : maxAliveBankroll !== null && maxAliveBankroll < r.startingStack ? (
+                    ) : maxAliveBankroll === null ? (
+                      <Button size="sm" asChild>
+                        <Link href="/roster?new">Create a player</Link>
+                      </Button>
+                    ) : maxAliveBankroll !== undefined && maxAliveBankroll < r.startingStack ? (
                       <Button
                         variant="outline"
                         size="sm"
