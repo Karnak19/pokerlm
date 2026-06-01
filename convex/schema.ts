@@ -7,6 +7,9 @@ export default defineSchema({
     email: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.number(),
+    // Set when the user dismisses the onboarding checklist chip. The chip
+    // also auto-hides once all steps are complete.
+    onboardingDismissedAt: v.optional(v.number()),
   }).index("by_token", ["tokenIdentifier"]),
 
   players: defineTable({
@@ -57,7 +60,8 @@ export default defineSchema({
   })
     .index("by_room", ["roomId"])
     .index("by_room_user", ["roomId", "userId"])
-    .index("by_room_seat", ["roomId", "seatIndex"]),
+    .index("by_room_seat", ["roomId", "seatIndex"])
+    .index("by_user", ["userId"]),
 
   games: defineTable({
     roomId: v.id("rooms"),

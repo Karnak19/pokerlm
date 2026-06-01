@@ -1,6 +1,6 @@
 import { mutation, query, type MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
-import { requireUser } from "./users";
+import { requireUser, requireUserReadOnly } from "./users";
 import { applyAction, startHand, type GameState } from "../src/engine/state";
 import { internal } from "./_generated/api";
 import type { Id, Doc } from "./_generated/dataModel";
@@ -50,6 +50,27 @@ export async function cashOutSeat(
   if (otherSeats.length > 0) return;
   await ctx.db.patch(seat.playerId, { status: "retired", retiredAt: Date.now() });
 }
+
+// All seats held by the current user, each with its room. Drives the
+// onboarding checklist (steps 3/4: "do I hold a seat" / "which room to
+// watch"). Returns [] when signed out. Indexed by `seats.by_user`.
+export const mySeats = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUserReadOnly(ctx);
+    if (!user) return [];
+    const seats = await ctx.db
+      .query("seats")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    return await Promise.all(
+      seats.map(async (s) => {
+        const room = await ctx.db.get(s.roomId);
+        return { ...s, room };
+      }),
+    );
+  },
+});
 
 export const listOpen = query({
   args: {},

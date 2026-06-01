@@ -2,7 +2,8 @@
 
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CURATED_MODELS, DEFAULT_SYSTEM_PROMPT, priceToMtok, type ModelOption } from "@/lib/models";
 import { Id } from "../../../convex/_generated/dataModel";
 import { Show, SignInButton } from "@clerk/nextjs";
@@ -71,6 +72,15 @@ function joinedAt(ts: number | undefined): string {
 }
 
 export default function PlayersPage() {
+  // useSearchParams needs a Suspense boundary under Cache Components.
+  return (
+    <Suspense>
+      <PlayersPageInner />
+    </Suspense>
+  );
+}
+
+function PlayersPageInner() {
   const players = useQuery(api.players.listMine);
   const me = useQuery(api.users.me);
   const myElo = useQuery(api.leaderboard.mine);
@@ -204,6 +214,20 @@ export default function PlayersPage() {
       document.getElementById("editor")?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }
+
+  // Deep-link from the onboarding checklist: /roster?new opens the editor
+  // straight away, then strips the param so a refresh doesn't re-trigger.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  /* eslint-disable react-hooks/set-state-in-effect -- syncing UI state from the ?new deep-link */
+  useEffect(() => {
+    if (searchParams.get("new") === null) return;
+    openNew();
+    router.replace(pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once when ?new is present
+  }, [searchParams]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const displayName = me?.name || me?.email?.split("@")[0] || "guest";
   const userInitial = (me?.name || me?.email || "?").trim().charAt(0).toUpperCase();

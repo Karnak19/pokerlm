@@ -52,6 +52,16 @@ export const getOrCreateCurrentUser = mutation({
   },
 });
 
+// Dismiss the onboarding checklist chip. The chip also auto-hides once all
+// four steps complete; this is the manual "I'm done, hide it" path.
+export const dismissOnboarding = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    await ctx.db.patch(user._id, { onboardingDismissedAt: Date.now() });
+  },
+});
+
 export const me = query({
   args: {},
   handler: async (ctx) => {
