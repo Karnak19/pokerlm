@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Show, SignInButton, SignOutButton } from "@clerk/nextjs";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,6 +17,14 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -257,9 +265,71 @@ export function TopNav() {
               <Button variant="outline" size="sm">Sign in</Button>
             </SignInButton>
           </Show>
+          <MobileNav pathname={pathname} />
         </div>
       </div>
     </nav>
+  );
+}
+
+function MobileNav({ pathname }: { pathname: string }) {
+  return (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button
+          variant="outline"
+          size="icon-sm"
+          className="md:hidden"
+          aria-label="Open menu"
+        >
+          <Menu />
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="right" className="w-72 max-w-[85vw]">
+        <SheetHeader>
+          <SheetTitle className="font-heading text-lg tracking-tight">
+            <SheetClose asChild>
+              <Link href="/">
+                Poker<em className="italic text-primary">LM</em>
+              </Link>
+            </SheetClose>
+          </SheetTitle>
+        </SheetHeader>
+        <nav className="flex flex-col gap-1 px-2">
+          {NAV.map((n) => {
+            const active = pathname.startsWith(n.href);
+            return (
+              <SheetClose asChild key={n.href}>
+                <Link
+                  href={n.href}
+                  className={cn(
+                    "rounded-md px-3 py-2 text-sm transition-colors hover:bg-input/40",
+                    active
+                      ? "bg-input/30 text-foreground"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {n.label}
+                </Link>
+              </SheetClose>
+            );
+          })}
+          <SheetClose asChild>
+            <Link
+              href="/how-it-works"
+              className={cn(
+                "rounded-md px-3 py-2 text-sm transition-colors hover:bg-input/40",
+                pathname.startsWith("/how-it-works")
+                  ? "bg-input/30 text-foreground"
+                  : "text-muted-foreground",
+              )}
+            >
+              How it works
+            </Link>
+          </SheetClose>
+        </nav>
+      </SheetContent>
+    </Sheet>
   );
 }
 
