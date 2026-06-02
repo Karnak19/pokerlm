@@ -160,6 +160,7 @@ function NavSeats() {
   // from any page (the room may have dropped out of the open list).
   const seats = useQuery(api.rooms.mySeats);
   const leave = useMutation(api.rooms.leave);
+  const [pendingId, setPendingId] = useState<string | null>(null);
   const count = seats?.length ?? 0;
   if (count === 0) return null;
 
@@ -209,7 +210,13 @@ function NavSeats() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => void leave({ roomId: seat.roomId })}
+                disabled={pendingId === seat._id}
+                onClick={() => {
+                  setPendingId(seat._id);
+                  void leave({ roomId: seat.roomId }).finally(() =>
+                    setPendingId(null),
+                  );
+                }}
               >
                 Leave
               </Button>
