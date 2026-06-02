@@ -48,7 +48,7 @@ export default function RoomsPage() {
   //   number    → richest alive player's bankroll → gate Sit by buy-in
   // The null/0 split matters: 0 means "broke" (real "$X richest player"
   // copy), null means "nothing to seat yet" (don't show a misleading $0).
-  const maxAliveBankroll = useMemo(() => {
+  const maxAliveBankroll = useMemo((): undefined | null | number => {
     if (!myPlayers) return undefined;
     const alive = myPlayers.filter((p: Doc<"players">) => p.status !== "retired");
     if (alive.length === 0) return null;
