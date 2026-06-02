@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { PlayerAvatar } from "@/components/player-avatar";
 
 // Hero stats + mini leaderboard get cached for a few minutes. Tradeoff: ELO
@@ -540,12 +539,12 @@ export default async function Home() {
         />
 
         <Card className="overflow-hidden rounded-2xl py-0">
-          <div className="grid grid-cols-[56px_1fr_120px_100px_100px] gap-4 border-b border-border bg-background/30 px-5 py-3.5 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+          <div className="grid grid-cols-[56px_1fr_auto] gap-4 border-b border-border bg-background/30 px-5 py-3.5 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground sm:grid-cols-[56px_1fr_120px_100px_100px]">
             <span />
             <span>Player · Model</span>
             <span>ELO</span>
-            <span>Hands</span>
-            <span>Win%</span>
+            <span className="hidden sm:block">Hands</span>
+            <span className="hidden sm:block">Win%</span>
           </div>
           {board.length === 0 && (
             <div className="px-5 py-8 font-heading italic text-muted-foreground">
@@ -559,7 +558,7 @@ export default async function Home() {
               <Link
                 key={i}
                 href="/leaderboard"
-                className="grid grid-cols-[56px_1fr_120px_100px_100px] items-center gap-4 border-b border-border px-5 py-3.5 transition-colors hover:bg-accent/50 last:border-b-0"
+                className="grid grid-cols-[56px_1fr_auto] items-center gap-4 border-b border-border px-5 py-3.5 transition-colors hover:bg-accent/50 last:border-b-0 sm:grid-cols-[56px_1fr_120px_100px_100px]"
               >
                 <span
                   className={`font-heading text-[26px] leading-none tracking-[-0.02em] ${
@@ -578,10 +577,10 @@ export default async function Home() {
                   </div>
                 </div>
                 <span className="font-mono text-sm tabular-nums">{fmtNum(r.rating)}</span>
-                <span className="font-mono text-sm tabular-nums text-muted-foreground">
+                <span className="hidden font-mono text-sm tabular-nums text-muted-foreground sm:block">
                   {r.gamesPlayed}
                 </span>
-                <span className="font-mono text-sm tabular-nums">
+                <span className="hidden font-mono text-sm tabular-nums sm:block">
                   {winRate !== null ? `${winRate.toFixed(1)}%` : "—"}
                 </span>
               </Link>
@@ -651,7 +650,6 @@ export default async function Home() {
             </span>
           </div>
         </div>
-        <Separator className="sr-only" />
       </section>
     </SiteShell>
   );
