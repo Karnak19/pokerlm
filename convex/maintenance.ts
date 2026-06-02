@@ -1,6 +1,7 @@
 import { internalMutation } from "./_generated/server";
 import { applyAction, legalActions, type GameState } from "../src/engine/state";
 import { updateEloFromGame } from "./leaderboard";
+import { cashOutSeat } from "./rooms";
 import { internal } from "./_generated/api";
 
 // Matches games.ts — wait long enough for browser-side reflect calls to land.
@@ -115,6 +116,13 @@ export const archiveIdleRooms = internalMutation({
         .collect();
       const threshold = seats.length === 0 ? EMPTY_ROOM_AFTER_MS : OCCUPIED_IDLE_ROOM_AFTER_MS;
       if (idleFor > threshold) {
+        // Cash out and delete every seat before finishing the room —
+        // otherwise the buy-ins locked in seat.stack vanish (the room drops
+        // out of listOpen with no leave path). Mirrors the `leave` teardown.
+        for (const seat of seats) {
+          await cashOutSeat(ctx, seat);
+          await ctx.db.delete(seat._id);
+        }
         await ctx.db.patch(r._id, { status: "finished" });
       }
     }

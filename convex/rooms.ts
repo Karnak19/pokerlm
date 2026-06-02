@@ -51,9 +51,11 @@ export async function cashOutSeat(
   await ctx.db.patch(seat.playerId, { status: "retired", retiredAt: Date.now() });
 }
 
-// All seats held by the current user, each with its room. Drives the
-// onboarding checklist (steps 3/4: "do I hold a seat" / "which room to
-// watch"). Returns [] when signed out. Indexed by `seats.by_user`.
+// Every seat the current user holds, across all rooms, with room and player
+// joined on. Powers both the navbar "active seats" affordance (leave from any
+// page) and the onboarding checklist (steps 3/4: "do I hold a seat" / "which
+// room to watch"). Drops rows whose room or player no longer exists, so the
+// frontend never routes to a dead table. Returns [] when signed out.
 export const mySeats = query({
   args: {},
   handler: async (ctx) => {

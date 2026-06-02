@@ -6,9 +6,10 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Show, SignInButton, SignOutButton } from "@clerk/nextjs";
-import { ArrowRight, Check, ChevronDown, X } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PlayerAvatar } from "@/components/player-avatar";
 import {
   Popover,
   PopoverContent,
@@ -17,6 +18,14 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -322,6 +331,79 @@ function NavOnboarding() {
   );
 }
 
+function NavSeats() {
+  // Every seat the user holds across all rooms. Lets a stranded player leave
+  // from any page (the room may have dropped out of the open list).
+  const seats = useQuery(api.rooms.mySeats);
+  const leave = useMutation(api.rooms.leave);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const count = seats?.length ?? 0;
+  if (count === 0) return null;
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="group inline-flex h-[30px] items-center gap-2 rounded-full border border-border bg-input/20 px-2.5 text-[12.5px] transition-colors hover:bg-input/40"
+          aria-label="Your active seats"
+        >
+          <span className="size-1.5 rounded-full bg-primary ring-[3px] ring-primary/20" />
+          <span className="hidden text-[10px] uppercase tracking-wide text-muted-foreground sm:inline">
+            SEATS
+          </span>
+          <span className="font-mono">{count}</span>
+          <ChevronDown className="size-2.5 text-muted-foreground transition-transform group-aria-expanded:rotate-180" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" sideOffset={10} className="w-80">
+        <PopoverHeader>
+          <PopoverTitle className="font-heading text-lg font-normal tracking-tight">
+            Active <em className="not-italic text-foreground/60">seats</em>
+          </PopoverTitle>
+          <PopoverDescription className="text-[11.5px]">
+            Leaving cashes the seat&apos;s chips back to bankroll.
+          </PopoverDescription>
+        </PopoverHeader>
+        <ul className="flex flex-col gap-1.5">
+          {seats?.map(({ seat, room, player }) => (
+            <li
+              key={seat._id}
+              className="flex items-center gap-2.5 rounded-md border border-border px-2 py-1.5"
+            >
+              <PlayerAvatar seed={player?._id} fallback={player?.name?.charAt(0)} size={28} />
+              <div className="min-w-0 flex-1">
+                <Link
+                  href={`/rooms/${room?._id}`}
+                  className="block truncate text-[13px] hover:text-primary"
+                >
+                  {room?.name}
+                </Link>
+                <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                  {player?.name} · ${seat.stack}
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pendingId === seat._id}
+                onClick={() => {
+                  setPendingId(seat._id);
+                  void leave({ roomId: seat.roomId }).finally(() =>
+                    setPendingId(null),
+                  );
+                }}
+              >
+                Leave
+              </Button>
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function NavUser() {
   // Just the auth-scoped user row — small, cheap. We intentionally avoid
   // subscribing to `leaderboard.top` here just to surface best-ELO in the
@@ -416,6 +498,9 @@ export function TopNav() {
         </div>
 
         <div className="ml-auto flex items-center gap-2.5">
+          <Show when="signed-in">
+            <NavSeats />
+          </Show>
           <NavKey />
           <Show when="signed-in">
             <NavOnboarding />
@@ -426,9 +511,71 @@ export function TopNav() {
               <Button variant="outline" size="sm">Sign in</Button>
             </SignInButton>
           </Show>
+          <MobileNav pathname={pathname} />
         </div>
       </div>
     </nav>
+  );
+}
+
+function MobileNav({ pathname }: { pathname: string }) {
+  return (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button
+          variant="outline"
+          size="icon-sm"
+          className="md:hidden"
+          aria-label="Open menu"
+        >
+          <Menu />
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="right" className="w-72 max-w-[85vw]">
+        <SheetHeader>
+          <SheetTitle className="font-heading text-lg tracking-tight">
+            <SheetClose asChild>
+              <Link href="/">
+                Poker<em className="italic text-primary">LM</em>
+              </Link>
+            </SheetClose>
+          </SheetTitle>
+        </SheetHeader>
+        <nav className="flex flex-col gap-1 px-2">
+          {NAV.map((n) => {
+            const active = pathname.startsWith(n.href);
+            return (
+              <SheetClose asChild key={n.href}>
+                <Link
+                  href={n.href}
+                  className={cn(
+                    "rounded-md px-3 py-2 text-sm transition-colors hover:bg-input/40",
+                    active
+                      ? "bg-input/30 text-foreground"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  {n.label}
+                </Link>
+              </SheetClose>
+            );
+          })}
+          <SheetClose asChild>
+            <Link
+              href="/how-it-works"
+              className={cn(
+                "rounded-md px-3 py-2 text-sm transition-colors hover:bg-input/40",
+                pathname.startsWith("/how-it-works")
+                  ? "bg-input/30 text-foreground"
+                  : "text-muted-foreground",
+              )}
+            >
+              How it works
+            </Link>
+          </SheetClose>
+        </nav>
+      </SheetContent>
+    </Sheet>
   );
 }
 
