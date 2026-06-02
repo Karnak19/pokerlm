@@ -63,12 +63,17 @@ export const mySeats = query({
       .query("seats")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
       .collect();
-    return await Promise.all(
-      seats.map(async (s) => {
-        const room = await ctx.db.get(s.roomId);
-        return { ...s, room };
+    const rows = await Promise.all(
+      seats.map(async (seat) => {
+        const room = await ctx.db.get(seat.roomId);
+        const player = await ctx.db.get(seat.playerId);
+        // Drop rows whose room or player no longer exists — never leak a
+        // null room (the frontend would route to a dead table).
+        if (!room || !player) return null;
+        return { seat, room, player };
       }),
     );
+    return rows.filter((r) => r !== null);
   },
 });
 

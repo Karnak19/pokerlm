@@ -214,7 +214,8 @@ function NavOnboarding() {
     myElo === undefined ||
     mySeats === undefined;
 
-  const activeSeat = (mySeats ?? []).find((s) => s.status !== "sitting_out") ?? null;
+  const activeSeat =
+    (mySeats ?? []).find((s) => s.seat.status !== "sitting_out") ?? null;
   const totalHands = (myElo ?? []).reduce((sum, r) => sum + r.gamesPlayed, 0);
 
   const steps: OnboardingStep[] = [
@@ -237,11 +238,11 @@ function NavOnboarding() {
       action: () => router.push("/rooms"),
     },
     {
-      label: "Watch your first hand",
+      label: "Play your first hand",
       done: totalHands > 0,
       cta: "Go to your table",
       action: () =>
-        router.push(activeSeat ? `/rooms/${activeSeat.roomId}` : "/rooms"),
+        router.push(activeSeat ? `/rooms/${activeSeat.room._id}` : "/rooms"),
     },
   ];
 
