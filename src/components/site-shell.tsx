@@ -450,8 +450,51 @@ function NavUser() {
   );
 }
 
+// Render the nav chips in exactly one place — the bar on desktop, the burger
+// sheet on mobile — so their Convex subscriptions aren't opened twice (a
+// CSS-hidden duplicate would still mount and subscribe). On mobile, Radix only
+// mounts the sheet contents when open, so the chips don't subscribe until the
+// menu is opened.
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const update = () => setIsDesktop(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return isDesktop;
+}
+
+function NavChips({ stacked = false }: { stacked?: boolean }) {
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-2.5",
+        stacked && "flex-col items-start gap-2",
+      )}
+    >
+      <Show when="signed-in">
+        <NavSeats />
+      </Show>
+      <NavKey />
+      <Show when="signed-in">
+        <NavOnboarding />
+        <NavUser />
+      </Show>
+      <Show when="signed-out">
+        <SignInButton mode="modal">
+          <Button variant="outline" size="sm">Sign in</Button>
+        </SignInButton>
+      </Show>
+    </div>
+  );
+}
+
 export function TopNav() {
   const pathname = usePathname() ?? "/";
+  const isDesktop = useIsDesktop();
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md backdrop-saturate-150">
       <div className="mx-auto flex h-15 max-w-[1400px] items-center gap-8 px-10">
@@ -498,20 +541,7 @@ export function TopNav() {
         </div>
 
         <div className="ml-auto flex items-center gap-2.5">
-          <Show when="signed-in">
-            <NavSeats />
-          </Show>
-          <NavKey />
-          <Show when="signed-in">
-            <NavOnboarding />
-            <NavUser />
-          </Show>
-          <Show when="signed-out">
-            <SignInButton mode="modal">
-              <Button variant="outline" size="sm">Sign in</Button>
-            </SignInButton>
-          </Show>
-          <MobileNav pathname={pathname} />
+          {isDesktop ? <NavChips /> : <MobileNav pathname={pathname} />}
         </div>
       </div>
     </nav>
@@ -519,8 +549,14 @@ export function TopNav() {
 }
 
 function MobileNav({ pathname }: { pathname: string }) {
+  const [open, setOpen] = useState(false);
+  // Close on navigation — a chip action (e.g. "New player") may route while the
+  // sheet is open, and SiteShell persists across routes.
+  /* eslint-disable react-hooks/set-state-in-effect -- close-on-route-change */
+  useEffect(() => setOpen(false), [pathname]);
+  /* eslint-enable react-hooks/set-state-in-effect */
   return (
-    <Sheet>
+    <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger asChild>
         <Button
           variant="outline"
@@ -574,6 +610,9 @@ function MobileNav({ pathname }: { pathname: string }) {
             </Link>
           </SheetClose>
         </nav>
+        <div className="mt-auto flex flex-col gap-2 border-t border-border px-2 pt-4">
+          <NavChips stacked />
+        </div>
       </SheetContent>
     </Sheet>
   );
