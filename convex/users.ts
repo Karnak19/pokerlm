@@ -3,7 +3,13 @@ import { Id } from "./_generated/dataModel";
 
 export async function requireUser(
   ctx: MutationCtx,
-): Promise<{ _id: Id<"users">; tokenIdentifier: string; email?: string; name?: string }> {
+): Promise<{
+  _id: Id<"users">;
+  tokenIdentifier: string;
+  email?: string;
+  name?: string;
+  onboardingDismissedAt?: number;
+}> {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Not authenticated");
   const existing = await ctx.db
@@ -49,6 +55,17 @@ export const getOrCreateCurrentUser = mutation({
       name: identity.name,
       createdAt: Date.now(),
     });
+  },
+});
+
+// Dismiss the onboarding checklist chip. The chip also auto-hides once all
+// four steps complete; this is the manual "I'm done, hide it" path.
+export const dismissOnboarding = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUser(ctx);
+    if (user.onboardingDismissedAt) return;
+    await ctx.db.patch(user._id, { onboardingDismissedAt: Date.now() });
   },
 });
 

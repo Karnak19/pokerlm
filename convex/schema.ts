@@ -7,6 +7,9 @@ export default defineSchema({
     email: v.optional(v.string()),
     name: v.optional(v.string()),
     createdAt: v.number(),
+    // Set when the user dismisses the onboarding checklist chip. The chip
+    // also auto-hides once all steps are complete.
+    onboardingDismissedAt: v.optional(v.number()),
   }).index("by_token", ["tokenIdentifier"]),
 
   players: defineTable({

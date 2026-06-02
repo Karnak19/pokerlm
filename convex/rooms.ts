@@ -51,6 +51,34 @@ export async function cashOutSeat(
   await ctx.db.patch(seat.playerId, { status: "retired", retiredAt: Date.now() });
 }
 
+// Every seat the current user holds, across all rooms, with room and player
+// joined on. Powers both the navbar "active seats" affordance (leave from any
+// page) and the onboarding checklist (steps 3/4: "do I hold a seat" / "which
+// room to watch"). Drops rows whose room or player no longer exists, so the
+// frontend never routes to a dead table. Returns [] when signed out.
+export const mySeats = query({
+  args: {},
+  handler: async (ctx) => {
+    const user = await requireUserReadOnly(ctx);
+    if (!user) return [];
+    const seats = await ctx.db
+      .query("seats")
+      .withIndex("by_user", (q) => q.eq("userId", user._id))
+      .collect();
+    const rows = await Promise.all(
+      seats.map(async (seat) => {
+        const room = await ctx.db.get(seat.roomId);
+        const player = await ctx.db.get(seat.playerId);
+        // Drop rows whose room or player no longer exists — never leak a
+        // null room (the frontend would route to a dead table).
+        if (!room || !player) return null;
+        return { seat, room, player };
+      }),
+    );
+    return rows.filter((r) => r !== null);
+  },
+});
+
 export const listOpen = query({
   args: {},
   handler: async (ctx) => {
@@ -68,30 +96,6 @@ export const listOpen = query({
         return { ...r, seatsTaken: seats.length };
       }),
     );
-  },
-});
-
-// Every seat the current user holds, across all rooms, with the room and
-// player joined on. Powers the navbar "active seats" affordance so a stranded
-// player can always leave from any page. Returns [] when signed out.
-export const mySeats = query({
-  args: {},
-  handler: async (ctx) => {
-    const user = await requireUserReadOnly(ctx);
-    if (!user) return [];
-    const seats = await ctx.db
-      .query("seats")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
-    const rows = await Promise.all(
-      seats.map(async (seat) => {
-        const room = await ctx.db.get(seat.roomId);
-        const player = await ctx.db.get(seat.playerId);
-        return { seat, room, player };
-      }),
-    );
-    // Drop any seats whose room or player no longer exists.
-    return rows.filter((r) => r.room !== null && r.player !== null);
   },
 });
 
