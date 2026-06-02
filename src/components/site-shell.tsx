@@ -285,10 +285,14 @@ function MobileNav({ pathname }: { pathname: string }) {
           <Menu />
         </Button>
       </SheetTrigger>
-      <SheetContent side="right" className="w-72">
+      <SheetContent side="right" className="w-72 max-w-[85vw]">
         <SheetHeader>
           <SheetTitle className="font-heading text-lg tracking-tight">
-            Poker<em className="italic text-primary">LM</em>
+            <SheetClose asChild>
+              <Link href="/">
+                Poker<em className="italic text-primary">LM</em>
+              </Link>
+            </SheetClose>
           </SheetTitle>
         </SheetHeader>
         <nav className="flex flex-col gap-1 px-2">
